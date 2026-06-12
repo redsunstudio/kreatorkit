@@ -16,6 +16,7 @@ COPY scripts ./scripts
 COPY types ./types
 COPY components.json ./components.json
 COPY next.config.ts ./next.config.ts
+COPY proxy.ts ./proxy.ts
 COPY postcss.config.mjs ./postcss.config.mjs
 COPY prisma.config.ts ./prisma.config.ts
 COPY tsconfig.json ./tsconfig.json
@@ -36,6 +37,7 @@ RUN apt-get update \
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/bun.lock ./bun.lock
 COPY --from=build /app/next.config.ts ./next.config.ts
+COPY --from=build /app/proxy.ts ./proxy.ts
 COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/scripts ./scripts

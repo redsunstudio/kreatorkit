@@ -178,8 +178,15 @@ Behavior when disabled:
 
 - `OPENFRAME_ENABLE_STRIPE=false` disables Stripe checkout and customer portal flows and removes billing-based workspace restrictions.
 - `OPENFRAME_ENABLE_BUNNY_UPLOADS=false` hides Bunny direct-upload entry points. URL-based providers such as YouTube remain available.
-- `OPENFRAME_ENABLE_S3_VIDEO_UPLOADS=true` (with `R2_*` configured) enables presigned uploads to your own S3-compatible storage. Set `OPENFRAME_ENABLE_BUNNY_UPLOADS=false` — only one direct-upload backend can be active. The bucket must allow CORS `PUT` from your app origin (for example `http://localhost:3000` in dev and your production URL). For Docker + MinIO, keep `R2_ENDPOINT=http://minio:9000` (app-internal) and set `R2_PRESIGN_ENDPOINT=http://localhost:9000` (browser-reachable host).
+- `OPENFRAME_ENABLE_S3_VIDEO_UPLOADS=true` (with `R2_*` configured) enables presigned uploads to your own S3-compatible storage. Set `OPENFRAME_ENABLE_BUNNY_UPLOADS=false` — only one direct-upload backend can be active. The bucket must allow CORS `PUT` from your app origin (for example `http://localhost:3000` in dev and your production URL). For Docker + MinIO, keep `R2_ENDPOINT=http://minio:9000` (app-internal) and set `R2_PRESIGN_ENDPOINT` to the browser-reachable MinIO origin (for example `http://localhost:9000` locally, or `https://minio.example.com` when MinIO is behind a reverse proxy). Use the origin only — no path suffix. The app's Content-Security-Policy is generated from runtime env at request time, so published Docker images pick up custom `R2_PRESIGN_ENDPOINT` values without rebuilding or editing `next.config.ts`.
 - `OPENFRAME_REQUIRE_INVITE_CODE=false` allows open registration while keeping invitation-link registration intact.
+
+For self-hosted MinIO behind a reverse proxy, choose one of these browser-facing layouts:
+
+- Separate storage host: route `https://minio.example.com` to MinIO and set `R2_PRESIGN_ENDPOINT=https://minio.example.com` plus `R2_PUBLIC_BASE_URL=https://minio.example.com/openframe`.
+- Same app host: route the bucket path, for example `https://openframe.example.com/openframe/*`, to MinIO and keep all other paths routed to the OpenFrame app. Set `R2_PRESIGN_ENDPOINT=https://openframe.example.com` and `R2_PUBLIC_BASE_URL=https://openframe.example.com/openframe`.
+
+Do not add an extra path prefix such as `/s3` in front of the bucket unless your proxy rewrites it away before MinIO sees the request. S3 path-style presigned URLs expect the first path segment to be the bucket name, so `/openframe/videos/...` is valid while `/s3/openframe/videos/...` makes MinIO treat `s3` as the bucket.
 
 These integrations remain optional for self-hosted deployments and can be enabled later by setting the related environment variables:
 
