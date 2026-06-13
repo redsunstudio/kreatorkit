@@ -8,7 +8,10 @@ Security fixes are prioritized for the latest code on `master` and recent releas
 ## Reporting a Vulnerability
 
 Please do not report security vulnerabilities in public issues.
-Report vulnerabilities by email to info@open-frame.net.
+
+**Preferred:** use [GitHub private vulnerability reporting](https://github.com/yusufipk/OpenFrame/security/advisories/new) on this repository.
+
+**Alternative:** email info@open-frame.net if you cannot use GitHub.
 
 Include as much detail as possible:
 
