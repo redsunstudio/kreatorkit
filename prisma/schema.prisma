@@ -103,6 +103,15 @@ enum VideoAssetProvider {
   R2_VIDEO
 }
 
+enum VideoStatus {
+  IDEA
+  FILMED
+  EDITING
+  REVIEW
+  APPROVED
+  PUBLISHED
+}
+
 model DownloadEgressEvent {
   id               String               @id @default(cuid())
   versionId        String
@@ -335,6 +344,10 @@ model Video {
   id          String   @id @default(cuid())
   title       String
   description String?  @db.Text
+
+  // KreatorKit production pipeline
+  status      VideoStatus @default(REVIEW)
+  brief       String?     @db.Text
   
   // Ordering within project
   position    Int      @default(0)
@@ -353,6 +366,7 @@ model Video {
   shareLinks  ShareLink[]
   
   @@index([projectId])
+  @@index([status])
   @@map("videos")
 }
 

@@ -176,7 +176,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { title, description, position } = body;
+    const { title, description, position, status, brief } = body;
 
     // Validate types before using string methods to prevent type confusion attacks
     if (
@@ -186,10 +186,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return apiErrors.badRequest('position must be a non-negative integer');
     }
 
+    const VIDEO_STATUSES = ['IDEA', 'FILMED', 'EDITING', 'REVIEW', 'APPROVED', 'PUBLISHED'];
+    if (status !== undefined && !VIDEO_STATUSES.includes(status)) {
+      return apiErrors.badRequest('status must be one of ' + VIDEO_STATUSES.join(', '));
+    }
+    if (brief !== undefined && brief !== null && typeof brief !== 'string') {
+      return apiErrors.badRequest('brief must be a string');
+    }
+
     const updateData: Record<string, unknown> = {};
     if (typeof title === 'string') updateData.title = title.trim();
     if (typeof description === 'string') updateData.description = description.trim() || null;
     if (position !== undefined) updateData.position = position;
+    if (status !== undefined) updateData.status = status;
+    if (brief !== undefined) updateData.brief = brief === null ? null : brief.trim() || null;
 
     const updatedVideo = await db.video.update({
       where: { id: videoId },

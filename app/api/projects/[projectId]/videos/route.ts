@@ -100,9 +100,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       duration,
       uploadToken,
       objectKey,
+      planned,
+      brief,
     } = body;
 
-    if (!title || !videoUrl) {
+    if (!title) {
+      return apiErrors.badRequest('Title is required');
+    }
+
+    // KreatorKit: a planned item enters the pipeline at IDEA with no file yet.
+    if (planned === true) {
+      if (brief !== undefined && brief !== null && typeof brief !== 'string') {
+        return apiErrors.badRequest('brief must be a string');
+      }
+      const lastPlanned = await db.video.findFirst({
+        where: { projectId },
+        orderBy: { position: 'desc' },
+      });
+      const plannedVideo = await db.video.create({
+        data: {
+          title: String(title).trim(),
+          description: typeof description === 'string' ? description.trim() || null : null,
+          brief: typeof brief === 'string' ? brief.trim() || null : null,
+          status: 'IDEA',
+          projectId,
+          position: (lastPlanned?.position ?? -1) + 1,
+        },
+        include: { versions: true, _count: { select: { versions: true } } },
+      });
+      const plannedResponse = successResponse(plannedVideo, 201);
+      return withCacheControl(plannedResponse, 'private, no-store');
+    }
+
+    if (!videoUrl) {
       return apiErrors.badRequest('Title and video URL are required');
     }
 
