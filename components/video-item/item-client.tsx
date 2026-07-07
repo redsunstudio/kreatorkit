@@ -468,7 +468,7 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
             {thumbnailUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={thumbnailUrl}
+                src={thumbnailUrl.includes('?') ? thumbnailUrl : `${thumbnailUrl}?inline=1`}
                 alt="Thumbnail"
                 className="rounded-lg border w-full aspect-video object-cover"
               />

@@ -198,7 +198,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return apiErrors.badRequest('brief must be a string');
     }
     if (thumbnailUrl !== undefined && thumbnailUrl !== null) {
-      if (typeof thumbnailUrl !== 'string' || !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download$/.test(thumbnailUrl)) {
+      if (typeof thumbnailUrl !== 'string' || !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/.test(thumbnailUrl)) {
         return apiErrors.badRequest('thumbnailUrl must be an asset download path');
       }
     }

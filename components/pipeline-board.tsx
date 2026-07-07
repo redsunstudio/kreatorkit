@@ -223,13 +223,33 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
         const stageItems = items.filter((v) => stageOf(v.status) === stage.key);
         if (stageItems.length === 0 && stage.key !== 'IDEA') return null;
         return (
-          <div key={stage.key}>
+          <div
+            key={stage.key}
+            onDragOver={(e) => {
+              if (!canEdit) return;
+              e.preventDefault();
+              setDragOverStage(stage.key);
+            }}
+            onDragLeave={() => setDragOverStage((cur) => (cur === stage.key ? null : cur))}
+            onDrop={(e) => {
+              if (!canEdit) return;
+              e.preventDefault();
+              setDragOverStage(null);
+              const id = e.dataTransfer.getData('text/kk-video');
+              if (id) void moveStatus(id, stage.key);
+            }}
+          >
             <div className="flex items-center gap-2 mb-2">
               <span className={cn('h-2 w-2 rounded-full', STAGE_DOT[stage.key])} />
               <span className="text-sm font-semibold">{stage.label}</span>
               <span className="text-xs text-muted-foreground font-mono">{stageItems.length}</span>
             </div>
-            <div className="rounded-lg border divide-y bg-card overflow-hidden">
+            <div
+              className={cn(
+                'rounded-lg border divide-y bg-card overflow-hidden transition-colors',
+                dragOverStage === stage.key && 'border-primary/60 bg-primary/5'
+              )}
+            >
               {stageItems.length === 0 && (
                 <p className="text-xs text-muted-foreground px-4 py-3">
                   Nothing here yet{canEdit ? ' — add the next video idea.' : '.'}
@@ -238,7 +258,12 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
               {stageItems.map((v) => (
                 <div
                   key={v.id}
-                  className="flex items-center gap-4 px-4 py-2.5 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150"
+                  draggable={canEdit}
+                  onDragStart={(e) => e.dataTransfer.setData('text/kk-video', v.id)}
+                  className={cn(
+                    'flex items-center gap-4 px-4 py-2.5 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
+                    canEdit && 'cursor-grab active:cursor-grabbing'
+                  )}
                 >
                   <Link
                     href={itemHref(v)}
