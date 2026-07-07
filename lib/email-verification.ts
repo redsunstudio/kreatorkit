@@ -111,7 +111,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
 
   const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   const from =
-    process.env.SMTP_FROM || process.env.EMAIL_FROM || 'OpenFrame <notifications@openframe.app>';
+    process.env.SMTP_FROM || process.env.EMAIL_FROM || 'JID <noreply@apps.johnisaacson.co.uk>';
 
   const html = brandedEmailTemplate(
     `
@@ -122,7 +122,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
             ${emailRow('Expires in', `${TOKEN_EXPIRY_HOURS} hours`)}
           </table>
           <p style="margin:0 0 20px;font-size:14px;color:${EMAIL_COLORS.textSecondary};line-height:1.6;">
-            Click the button below to verify your email address and activate your OpenFrame account.
+            Click the button below to verify your email address and activate your JID account.
             If you did not create an account, you can safely ignore this email.
           </p>
           ${emailButton('Verify Email Address  &#8594;', verifyUrl)}
@@ -137,7 +137,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
     await transporter.sendMail({
       from,
       to: email,
-      subject: 'Verify your OpenFrame email address',
+      subject: 'Verify your JID email address',
       html,
     });
   } catch (err) {

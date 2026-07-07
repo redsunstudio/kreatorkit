@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       const settingsUrl = `${process.env.NEXTAUTH_URL || ''}/settings`;
       const telegramPayload: Record<string, unknown> = {
         chat_id: telegramChatId,
-        text: '✅ OpenFrame notifications connected successfully!\n\nYou will receive notifications here when activity happens on your projects.',
+        text: '✅ JID notifications connected successfully!\n\nYou will receive notifications here when activity happens on your projects.',
         link_preview_options: { is_disabled: true },
       };
       // Telegram inline keyboard buttons require HTTPS URLs
@@ -193,13 +193,13 @@ export async function POST(request: NextRequest) {
       const fromAddress =
         process.env.SMTP_FROM ||
         process.env.EMAIL_FROM ||
-        'OpenFrame <notifications@openframe.app>';
+        'JID <noreply@apps.johnisaacson.co.uk>';
 
       try {
         await transporter.sendMail({
           from: fromAddress,
           to: user.email,
-          subject: '[OpenFrame] Test notification',
+          subject: '[JID] Test notification',
           html: testEmailHtml(),
         });
       } catch (emailErr) {

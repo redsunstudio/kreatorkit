@@ -228,7 +228,7 @@ export function buildCommentsPdf(
     ? `v${meta.versionNumber} (${meta.versionLabel})`
     : `v${meta.versionNumber}`;
 
-  lines.push(`OpenFrame Comments Export`);
+  lines.push(`JID Comments Export`);
   lines.push(`Video: ${meta.videoTitle}`);
   lines.push(`Version: ${versionTitle}`);
   lines.push(`Generated At: ${new Date().toISOString()}`);

@@ -384,7 +384,7 @@ export default function FeedbackPage() {
                       onChange={(event) => setReviewMessage(event.target.value)}
                       minLength={10}
                       maxLength={3000}
-                      placeholder="What has your experience been like using OpenFrame?"
+                      placeholder="What has your experience been like using JID?"
                       required
                       disabled={isSubmittingReview}
                       rows={6}
@@ -400,7 +400,7 @@ export default function FeedbackPage() {
                       disabled={isSubmittingReview}
                     />
                     <span>
-                      I allow OpenFrame to potentially showcase this review on the landing page.
+                      I allow JID to potentially showcase this review on the landing page.
                     </span>
                   </label>
 

@@ -15,7 +15,7 @@ export function PricingComparison({ rows, footnote, competitorName }: PricingCom
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{row.label}</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.12em] text-primary">OpenFrame</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-primary">JID</p>
                 <p className="mt-1 text-sm text-foreground">{row.openframe}</p>
               </div>
               <div>

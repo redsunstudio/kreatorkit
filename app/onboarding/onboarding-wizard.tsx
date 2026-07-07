@@ -115,10 +115,10 @@ function StepWelcome({ userName, onNext }: { userName: string; onNext: () => voi
       </div>
       <div className="space-y-3">
         <h2 className="text-3xl font-bold tracking-tight">
-          Welcome to OpenFrame, {userName.split(' ')[0]}!
+          Welcome to JID, {userName.split(' ')[0]}!
         </h2>
         <p className="text-base text-muted-foreground max-w-md mx-auto">
-          OpenFrame is your collaborative video review platform. Collect timestamped feedback,
+          JID is your collaborative video review platform. Collect timestamped feedback,
           manage versions, and streamline approvals — all in one place.
         </p>
       </div>
@@ -522,7 +522,7 @@ function StepVideo({ onNext }: { onNext: () => void }) {
         </div>
         <h2 className="text-2xl font-bold tracking-tight">Adding videos</h2>
         <p className="text-base text-muted-foreground">
-          OpenFrame supports two ways to add video content to your projects.
+          JID supports two ways to add video content to your projects.
         </p>
       </div>
 
@@ -533,7 +533,7 @@ function StepVideo({ onNext }: { onNext: () => void }) {
             YouTube link
           </div>
           <p className="text-sm text-muted-foreground">
-            Paste a link to any YouTube video. OpenFrame will pull in the title, thumbnail, and
+            Paste a link to any YouTube video. JID will pull in the title, thumbnail, and
             duration automatically — no file upload needed.
           </p>
         </div>

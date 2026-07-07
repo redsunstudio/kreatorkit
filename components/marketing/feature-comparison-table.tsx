@@ -44,7 +44,7 @@ export function FeatureComparisonTable({ rows, competitorName }: FeatureComparis
         <thead className="border-b border-border bg-background/60">
           <tr>
             <th className="px-4 py-3 font-medium text-muted-foreground">Feature</th>
-            <th className="px-4 py-3 font-medium text-primary">OpenFrame</th>
+            <th className="px-4 py-3 font-medium text-primary">JID</th>
             <th className="px-4 py-3 font-medium text-muted-foreground">{competitorName}</th>
           </tr>
         </thead>

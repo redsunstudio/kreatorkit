@@ -3,8 +3,8 @@ import { Video } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | OpenFrame',
-  description: 'Privacy Policy for OpenFrame by IPEK TECH LLC.',
+  title: 'Privacy Policy | JID',
+  description: 'Privacy Policy for JID by IPEK TECH LLC.',
 };
 
 export default function PrivacyPolicyPage() {
@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage() {
             className="flex items-center gap-2 text-sm font-semibold hover:text-primary transition-colors"
           >
             <Video className="h-4 w-4 text-primary" />
-            OpenFrame
+            JID
           </Link>
           <Link
             href="/"
@@ -38,7 +38,7 @@ export default function PrivacyPolicyPage() {
             <p>
               <strong className="text-foreground">IPEK TECH LLC</strong> (&ldquo;Company&rdquo;,
               &ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;), a Wyoming limited liability
-              company, operates the OpenFrame platform at open-frame.net (the
+              company, operates the JID platform at open-frame.net (the
               &ldquo;Service&rdquo;). This Privacy Policy explains how we collect, use, share, and
               protect information about you when you use our Service.
             </p>

@@ -3,8 +3,8 @@ import { Video } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | OpenFrame',
-  description: 'Terms of Service for OpenFrame by IPEK TECH LLC.',
+  title: 'Terms of Service | JID',
+  description: 'Terms of Service for JID by IPEK TECH LLC.',
 };
 
 export default function TermsOfServicePage() {
@@ -17,7 +17,7 @@ export default function TermsOfServicePage() {
             className="flex items-center gap-2 text-sm font-semibold hover:text-primary transition-colors"
           >
             <Video className="h-4 w-4 text-primary" />
-            OpenFrame
+            JID
           </Link>
           <Link
             href="/"
@@ -40,7 +40,7 @@ export default function TermsOfServicePage() {
               between you (&ldquo;User&rdquo;, &ldquo;you&rdquo;, or &ldquo;your&rdquo;) and{' '}
               <strong className="text-foreground">IPEK TECH LLC</strong>, a Wyoming limited
               liability company (&ldquo;Company&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or
-              &ldquo;our&rdquo;), governing your access to and use of the OpenFrame platform,
+              &ldquo;our&rdquo;), governing your access to and use of the JID platform,
               available at open-frame.net (the &ldquo;Service&rdquo;).
             </p>
             <p className="mt-3">
@@ -55,7 +55,7 @@ export default function TermsOfServicePage() {
               2. Description of Service
             </h2>
             <p>
-              OpenFrame is a video review and approval platform that enables creative professionals
+              JID is a video review and approval platform that enables creative professionals
               and their clients to collaborate on video projects through timestamped comments,
               annotations, version management, and approval workflows. The Service is offered on a
               subscription basis with a free trial period.

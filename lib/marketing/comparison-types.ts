@@ -78,7 +78,7 @@ export interface ComparisonPageDefinition {
   painBullets: string[];
   solutionTitle: string;
   solutionNarrative: string;
-  bestForOpenFrame: string[];
+  bestForJID: string[];
   bestForCompetitor: string[];
   openframeWins: string[];
   competitorWins: string[];

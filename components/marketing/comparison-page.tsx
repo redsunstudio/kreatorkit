@@ -77,9 +77,9 @@ export function ComparisonPage({ page, isLoggedIn }: ComparisonPageProps) {
         <section className="border-b border-border bg-background px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
           <div className="mx-auto grid w-full max-w-[1200px] gap-8 lg:grid-cols-2">
             <div className="border border-primary/30 bg-primary/5 p-6">
-              <h3 className="text-xl font-semibold">Where OpenFrame fits best</h3>
+              <h3 className="text-xl font-semibold">Where JID fits best</h3>
               <ul className="mt-4 space-y-3 text-sm text-foreground/90 md:text-base">
-                {page.bestForOpenFrame.map((item) => (
+                {page.bestForJID.map((item) => (
                   <li key={item}>- {item}</li>
                 ))}
               </ul>
@@ -98,7 +98,7 @@ export function ComparisonPage({ page, isLoggedIn }: ComparisonPageProps) {
         <section className="border-b border-border bg-card/10 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
           <div className="mx-auto grid w-full max-w-[1200px] gap-8 lg:grid-cols-2">
             <div>
-              <h3 className="text-2xl font-semibold">OpenFrame advantages</h3>
+              <h3 className="text-2xl font-semibold">JID advantages</h3>
               <ul className="mt-4 space-y-3 text-sm md:text-base">
                 {page.openframeWins.map((item) => (
                   <li key={item} className="border border-border bg-background p-4">
@@ -142,7 +142,7 @@ export function ComparisonPage({ page, isLoggedIn }: ComparisonPageProps) {
                 Pricing comparison
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-muted-foreground md:text-base">
-                OpenFrame is $10/month flat with a 7-day free trial. You do not pay per team member,
+                JID is $10/month flat with a 7-day free trial. You do not pay per team member,
                 collaborator, or guest reviewer. Self-hosting is free with Docker.
               </p>
             </div>

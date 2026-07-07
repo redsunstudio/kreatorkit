@@ -3,8 +3,8 @@ import { Video } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Refund Policy | OpenFrame',
-  description: 'Refund Policy for OpenFrame by IPEK TECH LLC.',
+  title: 'Refund Policy | JID',
+  description: 'Refund Policy for JID by IPEK TECH LLC.',
 };
 
 export default function RefundPolicyPage() {
@@ -17,7 +17,7 @@ export default function RefundPolicyPage() {
             className="flex items-center gap-2 text-sm font-semibold hover:text-primary transition-colors"
           >
             <Video className="h-4 w-4 text-primary" />
-            OpenFrame
+            JID
           </Link>
           <Link
             href="/"
@@ -36,7 +36,7 @@ export default function RefundPolicyPage() {
           <section>
             <h2 className="text-base font-semibold text-foreground mb-3">1. Overview</h2>
             <p>
-              This Refund Policy applies to all paid subscriptions to the OpenFrame platform
+              This Refund Policy applies to all paid subscriptions to the JID platform
               operated by <strong className="text-foreground">IPEK TECH LLC</strong>, a Wyoming
               limited liability company. By subscribing, you acknowledge and agree to this policy.
             </p>

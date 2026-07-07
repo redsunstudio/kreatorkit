@@ -25,10 +25,10 @@ export function getSiteUrl(): string {
 }
 
 export const seoConfig = {
-  name: 'OpenFrame',
-  title: 'Open Source Video Review Platform',
+  name: 'JID',
+  title: 'Client Review Platform',
   description:
-    'OpenFrame is an open source video review platform for collecting timestamped feedback with text and voice comments.',
+    'JID is an open source video review platform for collecting timestamped feedback with text and voice comments.',
   keywords: [
     'open source video review platform',
     'video review tool',
@@ -41,5 +41,5 @@ export const seoConfig = {
   ogImage: '/meta.webp',
   logoPath: '/icon.svg',
   logo: '/icon.svg?v=2',
-  githubUrl: 'https://github.com/yusufipk/OpenFrame',
+  githubUrl: 'https://github.com/yusufipk/JID',
 } as const;
