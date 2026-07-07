@@ -10,6 +10,10 @@ import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response
 import { logError } from '@/lib/logger';
 import { canDownloadProjectMedia } from '@/lib/project-download';
 
+function bigintSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
+}
+
 type RouteParams = { params: Promise<{ projectId: string; videoId: string }> };
 
 // GET /api/projects/[projectId]/videos/[videoId]
