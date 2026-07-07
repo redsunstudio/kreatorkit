@@ -227,6 +227,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
         }
 
+        // KreatorKit pipeline: a fresh cut moves pre-review items into REVIEW.
+        await tx.video.updateMany({
+          where: { id: videoId, status: { in: ['IDEA', 'FILMED', 'EDITING'] } },
+          data: { status: 'REVIEW' },
+        });
         return tx.videoVersion.create({
           data: {
             versionNumber: nextVersionNumber,
