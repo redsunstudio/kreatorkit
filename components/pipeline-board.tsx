@@ -33,12 +33,12 @@ import {
 import { cn } from '@/lib/utils';
 
 export const PIPELINE_STAGES = [
-  { key: 'IDEA', label: 'Idea' },
-  { key: 'EDITING', label: 'In edit' },
-  { key: 'REVIEW', label: 'In review' },
-  { key: 'APPROVED', label: 'Approved' },
-  { key: 'PUBLISHED', label: 'Published' },
-  { key: 'REJECTED', label: 'Rejected' },
+  { key: 'IDEA', label: 'Idea', emoji: '💡' },
+  { key: 'EDITING', label: 'In edit', emoji: '✂️' },
+  { key: 'REVIEW', label: 'In review', emoji: '👀' },
+  { key: 'APPROVED', label: 'Approved', emoji: '✅' },
+  { key: 'PUBLISHED', label: 'Published', emoji: '🚀' },
+  { key: 'REJECTED', label: 'Rejected', emoji: '❌' },
 ] as const;
 
 // Retired stages still present on old rows map into the nearest live stage.
@@ -56,6 +56,15 @@ const STAGE_CHIP: Record<StageKey, string> = {
   APPROVED: 'bg-green-500/10 text-green-400 border-green-500/30',
   PUBLISHED: 'bg-green-700/15 text-green-500 border-green-700/40',
   REJECTED: 'bg-red-500/10 text-red-400 border-red-500/30',
+};
+
+const STAGE_COL: Record<StageKey, string> = {
+  IDEA: 'bg-white/[0.02]',
+  EDITING: 'bg-orange-500/[0.05]',
+  REVIEW: 'bg-blue-400/[0.05]',
+  APPROVED: 'bg-green-500/[0.05]',
+  PUBLISHED: 'bg-green-700/[0.06]',
+  REJECTED: 'bg-red-500/[0.05]',
 };
 
 const STAGE_DOT: Record<StageKey, string> = {
@@ -98,6 +107,7 @@ function StagePill({ status }: { status: string }) {
         STAGE_CHIP[key]
       )}
     >
+      {PIPELINE_STAGES.find((s) => s.key === key)?.emoji}{' '}
       {PIPELINE_STAGES.find((s) => s.key === key)?.label}
     </span>
   );
@@ -241,7 +251,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
             }}
           >
             <div className="flex items-center gap-2 mb-2">
-              <span className={cn('h-2 w-2 rounded-full', STAGE_DOT[stage.key])} />
+              <span className="text-sm leading-none">{stage.emoji}</span>
               <span className="text-sm font-semibold">{stage.label}</span>
               <span className="text-xs text-muted-foreground font-mono">{stageItems.length}</span>
             </div>
@@ -286,7 +296,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
                       <SelectContent>
                         {PIPELINE_STAGES.map((st) => (
                           <SelectItem key={st.key} value={st.key} className="text-xs">
-                            {st.label}
+                            {st.emoji} {st.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -312,7 +322,8 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
           <div
             key={stage.key}
             className={cn(
-              'flex-none w-[250px] rounded-lg border bg-card/60 transition-colors',
+              'flex-none w-[250px] rounded-lg border transition-colors',
+              STAGE_COL[stage.key],
               dragOverStage === stage.key && 'border-primary/60 bg-primary/5'
             )}
             onDragOver={(e) => {
@@ -330,7 +341,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
             }}
           >
             <div className="flex items-center gap-2 px-3 py-2.5 border-b">
-              <span className={cn('h-2 w-2 rounded-full', STAGE_DOT[stage.key])} />
+              <span className="text-sm leading-none">{stage.emoji}</span>
               <span className="text-xs font-semibold uppercase tracking-wide">{stage.label}</span>
               <span className="text-xs text-muted-foreground font-mono ml-auto">
                 {stageItems.length}

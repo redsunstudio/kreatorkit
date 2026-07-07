@@ -355,7 +355,7 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
             <SelectContent>
               {PIPELINE_STAGES.map((s) => (
                 <SelectItem key={s.key} value={s.key}>
-                  {s.label}
+                  {s.emoji} {s.label}
                 </SelectItem>
               ))}
             </SelectContent>
