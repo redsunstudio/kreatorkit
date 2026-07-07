@@ -126,7 +126,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const canDownload = canDownloadProjectMedia(video.project, access);
     const response = successResponse({
-      ...video,
+      ...bigintSafe(video),
       isAuthenticated: !!session?.user?.id,
       currentUserId: session?.user?.id || null,
       currentUserName: session?.user?.name || null,
@@ -216,7 +216,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    const response = successResponse(updatedVideo);
+    const response = successResponse(bigintSafe(updatedVideo));
     return withCacheControl(response, 'private, no-store');
   } catch (error) {
     logError('Error updating video:', error);
