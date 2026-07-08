@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { PIPELINE_STAGES, stageOf } from '@/components/pipeline-board';
-import { VIDEO_TYPES, typeMeta } from '@/lib/video-type';
+import { VIDEO_TYPES, typeMeta, isImageAsset } from '@/lib/video-type';
 
 interface ItemVersion {
   id: string;
@@ -1168,10 +1168,10 @@ export function VideoItemClient({
             </div>
           ))}
           {/* Posts: see the images as they'll appear, not just filenames */}
-          {isPost && assets.some((a) => a.kind === 'IMAGE') && (
+          {isPost && assets.some((a) => isImageAsset(a)) && (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {assets
-                .filter((a) => a.kind === 'IMAGE')
+                .filter((a) => isImageAsset(a))
                 .map((a) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -1342,7 +1342,7 @@ export function VideoItemClient({
                 <span className="flex-none mt-0.5">
                   {assets.some((a) => a.kind === 'VIDEO')
                     ? '🎥'
-                    : assets.some((a) => a.kind === 'IMAGE')
+                    : assets.some((a) => isImageAsset(a))
                       ? '🖼️'
                       : assets.some((a) => /\.pdf$/i.test(a.displayName))
                         ? '📄'
@@ -1353,8 +1353,8 @@ export function VideoItemClient({
                   <p className="text-muted-foreground">
                     {assets.some((a) => a.kind === 'VIDEO')
                       ? 'Video post'
-                      : assets.filter((a) => a.kind === 'IMAGE').length > 0
-                        ? `${Math.min(assets.filter((a) => a.kind === 'IMAGE').length, 9)} image${assets.filter((a) => a.kind === 'IMAGE').length === 1 ? '' : 's'}${assets.filter((a) => a.kind === 'IMAGE').length > 1 ? ' (carousel)' : ''}`
+                      : assets.filter((a) => isImageAsset(a)).length > 0
+                        ? `${Math.min(assets.filter((a) => isImageAsset(a)).length, 9)} image${assets.filter((a) => isImageAsset(a)).length === 1 ? '' : 's'}${assets.filter((a) => isImageAsset(a)).length > 1 ? ' (carousel)' : ''}`
                         : assets.some((a) => /\.pdf$/i.test(a.displayName))
                           ? 'Document post (PDF)'
                           : 'Text-only post'}

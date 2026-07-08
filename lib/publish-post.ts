@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { createPresignedFileGetUrl, createPresignedVideoGetUrl } from '@/lib/r2';
 import { mediaUrlToKey } from '@/lib/r2-cleanup';
 import { PublishError, workspaceZernioConfig } from '@/lib/publish-video';
+import { isImageAsset } from '@/lib/video-type';
 import { zernioCreatePost, zernioListAccounts, zernioUploadFromUrl } from '@/lib/zernio';
 import type { ZernioMediaItem } from '@/lib/zernio';
 
@@ -93,7 +94,7 @@ export async function publishPostToLinkedIn(
   )?.[1];
   const usable = options.repostUrl ? [] : video.assets.filter((a) => a.id !== thumbnailAssetId);
   const firstVideo = usable.find((a) => a.kind === 'VIDEO');
-  const images = usable.filter((a) => a.kind === 'IMAGE').slice(0, 9);
+  const images = usable.filter((a) => isImageAsset(a)).slice(0, 9);
   const firstPdf = usable.find((a) => a.kind === 'FILE' && /\.pdf$/i.test(a.displayName));
 
   const mediaItems: ZernioMediaItem[] = [];

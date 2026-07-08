@@ -445,7 +445,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const storedName = objectKey.slice(objectKey.indexOf('-') + 1);
       displayName = sanitizeAssetDisplayName(requestedDisplayName, storedName || 'File');
       sourceUrl = objectKey; // object key doubles as the retrieval handle for downloads
-      kind = 'FILE';
+      // Kind follows the actual content — images/audio uploaded through the
+      // generic path must still count as images/audio (post media, previews).
+      const fileCt = head.contentType ?? '';
+      kind = fileCt.startsWith('image/')
+        ? 'IMAGE'
+        : fileCt.startsWith('audio/')
+          ? 'AUDIO'
+          : /\.(png|jpe?g|webp|gif)$/i.test(displayName)
+            ? 'IMAGE'
+            : 'FILE';
     }
 
     if (provider === VideoAssetProvider.R2_VIDEO) {

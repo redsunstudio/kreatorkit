@@ -4,6 +4,7 @@
 
 import { db } from '@/lib/db';
 import { mediaUrlToKey } from '@/lib/r2-cleanup';
+import { isImageAsset } from '@/lib/video-type';
 
 export async function getPostReviewByToken(token: string) {
   if (!token || token.length < 10) return null;
@@ -49,7 +50,7 @@ export function resolveReviewMedia(video: {
   if (firstVideo) {
     return [{ assetId: firstVideo.id, kind: 'video', name: firstVideo.displayName }];
   }
-  const images = usable.filter((a) => a.kind === 'IMAGE').slice(0, 9);
+  const images = usable.filter((a) => isImageAsset(a)).slice(0, 9);
   if (images.length > 0) {
     return images.map((a) => ({ assetId: a.id, kind: 'image' as const, name: a.displayName }));
   }
