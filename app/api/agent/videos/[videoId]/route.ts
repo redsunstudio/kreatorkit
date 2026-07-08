@@ -120,6 +120,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;
     if (videoType !== undefined) updateData.videoType = videoType;
+    if (typeof body?.title === 'string' && body.title.trim()) {
+      updateData.title = String(body.title).trim().slice(0, 200);
+    }
+    if (body?.thumbnailUrl !== undefined) {
+      if (
+        body.thumbnailUrl !== null &&
+        !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/.test(
+          String(body.thumbnailUrl)
+        )
+      ) {
+        return apiErrors.badRequest('thumbnailUrl must be an asset download path');
+      }
+      updateData.thumbnailUrl = body.thumbnailUrl;
+    }
     if (body?.zernioPostId !== undefined) {
       if (body.zernioPostId !== null && !/^[a-f0-9]{24}$/.test(String(body.zernioPostId))) {
         return apiErrors.badRequest('zernioPostId must be a Zernio post id or null');
