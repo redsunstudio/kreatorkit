@@ -286,7 +286,8 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
             </div>
             <div
               className={cn(
-                'rounded-lg border divide-y bg-card overflow-hidden transition-colors',
+                'rounded-lg border divide-y overflow-hidden transition-colors',
+                STAGE_COL[stage.key],
                 dragOverStage === stage.key && 'border-primary/60 bg-primary/5'
               )}
             >
