@@ -46,6 +46,7 @@ interface SerializedVideo {
   id: string;
   title: string;
   status: string;
+  videoType: string;
   brief: string | null;
   thumbnailUrl: string;
   currentVersion: number;
@@ -439,20 +440,22 @@ export function ProjectContentClient({
       {/* Videos Grid — cuts only; idea-stage items live on the pipeline board */}
       {localVideos.filter((v) => v.currentVersion > 0).length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {localVideos.filter((v) => v.currentVersion > 0).map((video) => (
-            <VideoCard
-              key={video.id}
-              video={video}
-              projectId={projectId}
-              canManage={canEdit}
-              canSelect={canSelectVideos}
-              selectionMode={selectionMode}
-              selected={selectedVideoIds.includes(video.id)}
-              onEnterSelectionMode={handleEnterSelectionMode}
-              onSelectedChange={(selected) => toggleVideoSelection(video.id, selected)}
-              onDeleted={handleVideoDeleted}
-            />
-          ))}
+          {localVideos
+            .filter((v) => v.currentVersion > 0)
+            .map((video) => (
+              <VideoCard
+                key={video.id}
+                video={video}
+                projectId={projectId}
+                canManage={canEdit}
+                canSelect={canSelectVideos}
+                selectionMode={selectionMode}
+                selected={selectedVideoIds.includes(video.id)}
+                onEnterSelectionMode={handleEnterSelectionMode}
+                onSelectedChange={(selected) => toggleVideoSelection(video.id, selected)}
+                onDeleted={handleVideoDeleted}
+              />
+            ))}
         </div>
       ) : (
         <Card className="border-dashed">

@@ -3,6 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { auth, checkWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { workspaceYouTubeAccountId } from '@/lib/publish-video';
+import { isZernioConfigured } from '@/lib/zernio';
 import { VideoItemClient } from '@/components/video-item/item-client';
 
 interface ItemPageProps {
@@ -37,8 +39,7 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
     session.user.id
   );
   if (!access.hasAccess) redirect('/dashboard');
-  const isAdmin =
-    session.user.id === workspace.ownerId || workspace.members[0]?.role === 'ADMIN';
+  const isAdmin = session.user.id === workspace.ownerId || workspace.members[0]?.role === 'ADMIN';
 
   return (
     <div
@@ -66,7 +67,9 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
           projectId: video.project.id,
           title: video.title,
           status: video.status,
+          videoType: video.videoType,
           brief: video.brief,
+          description: video.description,
           thumbnailUrl: video.thumbnailUrl,
           versions: video.versions.map((v) => ({
             id: v.id,
@@ -76,6 +79,9 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
           })),
         }}
         canEdit={isAdmin || access.canEdit}
+        publishReady={
+          isZernioConfigured() && Boolean(workspaceYouTubeAccountId(workspace.publishing))
+        }
       />
     </div>
   );

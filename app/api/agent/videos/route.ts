@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { VideoStatus } from '@prisma/client';
+import { VideoStatus, VideoType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { isAgentRequest } from '@/lib/agent-auth';
@@ -12,7 +12,9 @@ function shape(v: {
   id: string;
   title: string;
   status: string;
+  videoType: string;
   brief: string | null;
+  description: string | null;
   thumbnailUrl: string | null;
   updatedAt: Date;
   projectId: string;
@@ -23,7 +25,9 @@ function shape(v: {
     id: v.id,
     title: v.title,
     status: v.status,
+    videoType: v.videoType,
     brief: v.brief,
+    description: v.description,
     thumbnailUrl: v.thumbnailUrl,
     updatedAt: v.updatedAt.toISOString(),
     projectId: v.projectId,
@@ -52,7 +56,9 @@ export async function GET(request: NextRequest) {
       orderBy: { updatedAt: 'desc' },
       take: 200,
       include: {
-        project: { select: { workspaceId: true, workspace: { select: { name: true, slug: true } } } },
+        project: {
+          select: { workspaceId: true, workspace: { select: { name: true, slug: true } } },
+        },
         _count: { select: { versions: true } },
       },
     });
@@ -71,7 +77,14 @@ export async function POST(request: NextRequest) {
     const workspaceId = typeof body?.workspaceId === 'string' ? body.workspaceId : '';
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     const brief = typeof body?.brief === 'string' ? body.brief.trim() : '';
+    const description = typeof body?.description === 'string' ? body.description.trim() : '';
+    const videoType = typeof body?.videoType === 'string' ? body.videoType : 'LONGFORM';
     if (!workspaceId || !title) return apiErrors.badRequest('workspaceId and title are required');
+    if (!(Object.values(VideoType) as string[]).includes(videoType)) {
+      return apiErrors.badRequest(
+        'videoType must be one of ' + Object.values(VideoType).join(', ')
+      );
+    }
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },
@@ -105,13 +118,18 @@ export async function POST(request: NextRequest) {
       data: {
         title,
         brief: brief || null,
+        description: description || null,
+        videoType: videoType as VideoType,
         status: 'IDEA',
         projectId: project.id,
         position: (last?.position ?? -1) + 1,
       },
     });
     return withCacheControl(
-      successResponse({ id: video.id, title: video.title, status: video.status }, 201),
+      successResponse(
+        { id: video.id, title: video.title, status: video.status, videoType: video.videoType },
+        201
+      ),
       'private, no-store'
     );
   } catch (error) {

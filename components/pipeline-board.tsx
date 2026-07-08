@@ -3,15 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import {
-  Film,
-  Kanban,
-  Lightbulb,
-  List,
-  Loader2,
-  MessageSquare,
-  Plus,
-} from 'lucide-react';
+import { Film, Kanban, Lightbulb, List, Loader2, MessageSquare, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { VIDEO_TYPES, typeMeta } from '@/lib/video-type';
 
 export const PIPELINE_STAGES = [
   { key: 'IDEA', label: 'Idea', emoji: '💡' },
@@ -70,16 +63,6 @@ const STAGE_COL: Record<StageKey, string> = {
   ARCHIVED: 'bg-white/[0.02]',
 };
 
-const STAGE_DOT: Record<StageKey, string> = {
-  IDEA: 'bg-muted-foreground',
-  EDITING: 'bg-orange-500',
-  REVIEW: 'bg-blue-400',
-  APPROVED: 'bg-green-500',
-  PUBLISHED: 'bg-green-700',
-  REJECTED: 'bg-red-500',
-  ARCHIVED: 'bg-zinc-600',
-};
-
 export function stageOf(status: string): StageKey {
   if (LEGACY_STAGE_MAP[status]) return LEGACY_STAGE_MAP[status];
   return (PIPELINE_STAGES.find((s) => s.key === status)?.key ?? 'IDEA') as StageKey;
@@ -89,6 +72,7 @@ interface PipelineVideo {
   id: string;
   title: string;
   status: string;
+  videoType?: string;
   brief: string | null;
   currentVersion: number;
   commentCount: number;
@@ -149,6 +133,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
   const [dialogOpen, setDialogOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [brief, setBrief] = useState('');
+  const [videoType, setVideoType] = useState('LONGFORM');
   const [creating, setCreating] = useState(false);
   const [dragOverStage, setDragOverStage] = useState<StageKey | null>(null);
 
@@ -181,16 +166,23 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ planned: true, title: title.trim(), brief: brief.trim() || null }),
+          body: JSON.stringify({
+            planned: true,
+            title: title.trim(),
+            brief: brief.trim() || null,
+            videoType,
+          }),
         }
       );
-      if (!res.ok) throw new Error((await res.json())?.error?.message || 'Could not create the item');
+      if (!res.ok)
+        throw new Error((await res.json())?.error?.message || 'Could not create the item');
       const created = (await res.json()).data;
       setItems((prev) => [
         {
           id: created.id,
           title: created.title,
           status: created.status,
+          videoType: created.videoType ?? videoType,
           brief: created.brief,
           currentVersion: 0,
           commentCount: 0,
@@ -202,6 +194,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
       setDialogOpen(false);
       setTitle('');
       setBrief('');
+      setVideoType('LONGFORM');
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not create the item');
@@ -217,14 +210,11 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
     const prev = current.status;
     setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: next } : v)));
     try {
-      const res = await fetch(
-        `/api/projects/${current.projectId || projectId}/videos/${videoId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: next }),
-        }
-      );
+      const res = await fetch(`/api/projects/${current.projectId || projectId}/videos/${videoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next }),
+      });
       if (!res.ok) throw new Error();
     } catch {
       setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: prev } : v)));
@@ -233,8 +223,15 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
   }
 
   function rowMeta(v: PipelineVideo) {
+    const t = typeMeta(v.videoType);
     return (
       <>
+        <span
+          className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono"
+          title={t.label}
+        >
+          {t.emoji} {t.label}
+        </span>
         <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono">
           {v.currentVersion > 0 ? (
             <>
@@ -320,7 +317,10 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
                   )}
                   {rowMeta(v)}
                   {canEdit ? (
-                    <Select value={stageOf(v.status)} onValueChange={(next) => moveStatus(v.id, next)}>
+                    <Select
+                      value={stageOf(v.status)}
+                      onValueChange={(next) => moveStatus(v.id, next)}
+                    >
                       <SelectTrigger className="h-7 w-[124px] text-xs px-2 flex-none">
                         <SelectValue />
                       </SelectTrigger>
@@ -348,7 +348,8 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
     <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
       {PIPELINE_STAGES.map((stage) => {
         const stageItems = items.filter((v) => stageOf(v.status) === stage.key);
-        if (stageItems.length === 0 && ['PUBLISHED', 'REJECTED', 'ARCHIVED'].includes(stage.key)) return null;
+        if (stageItems.length === 0 && ['PUBLISHED', 'REJECTED', 'ARCHIVED'].includes(stage.key))
+          return null;
         return (
           <div
             key={stage.key}
@@ -468,6 +469,18 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
               maxLength={200}
               autoFocus
             />
+            <Select value={videoType} onValueChange={setVideoType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VIDEO_TYPES.map((t) => (
+                  <SelectItem key={t.key} value={t.key}>
+                    {t.emoji} {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Textarea
               placeholder="Brief (optional) — the angle, the hook, anything the shoot or edit needs to know"
               value={brief}

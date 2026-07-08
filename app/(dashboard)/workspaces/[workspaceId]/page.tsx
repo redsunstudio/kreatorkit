@@ -1,19 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import {
-  ArrowLeft,
-  Plus,
-  Settings,
-  FolderOpen,
-  Clock,
-  Users,
-  Globe,
-  Lock,
-  UserPlus,
-} from 'lucide-react';
+import { ArrowLeft, Settings, FolderOpen, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { auth, checkWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { VideoDragDropUploader } from '@/components/video-drag-drop-uploader';
@@ -21,31 +9,6 @@ import { isDirectFileUploadEnabled, isS3VideoUploadsEnabled } from '@/lib/featur
 import { ModuleNav } from '@/components/workspace/module-nav';
 import { PipelineBoard } from '@/components/pipeline-board';
 import { CoverButton } from '@/components/workspace/cover-button';
-
-function VisibilityIcon({ visibility }: { visibility: string }) {
-  switch (visibility) {
-    case 'PUBLIC':
-      return <Globe className="h-3.5 w-3.5" />;
-    case 'INVITE':
-      return <UserPlus className="h-3.5 w-3.5" />;
-    default:
-      return <Lock className="h-3.5 w-3.5" />;
-  }
-}
-
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
 
 interface WorkspacePageProps {
   params: Promise<{ workspaceId: string }>;
@@ -106,8 +69,6 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     redirect('/dashboard');
   }
 
-  const totalPages = Math.ceil(workspace._count.projects / pageSize);
-
   // KreatorKit flattened view: every video item across the workspace's (hidden) projects
   const workspaceVideos = await db.video.findMany({
     where: { project: { workspaceId } },
@@ -129,19 +90,26 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     id: v.id,
     title: v.title,
     status: v.status,
+    videoType: v.videoType,
     brief: v.brief,
     currentVersion: v._count.versions,
     commentCount: v.versions[0]?._count.comments ?? 0,
     projectId: v.projectId,
     thumbnailUrl: v.thumbnailUrl
-      ? (v.thumbnailUrl.includes('?') ? v.thumbnailUrl : `${v.thumbnailUrl}?inline=1`)
+      ? v.thumbnailUrl.includes('?')
+        ? v.thumbnailUrl
+        : `${v.thumbnailUrl}?inline=1`
       : (v.versions[0]?.thumbnailUrl ?? null),
   }));
 
   return (
     <div
       className="px-6 lg:px-8 py-8 w-full"
-      style={workspace.brandAccent ? ({ '--primary': workspace.brandAccent } as React.CSSProperties) : undefined}
+      style={
+        workspace.brandAccent
+          ? ({ '--primary': workspace.brandAccent } as React.CSSProperties)
+          : undefined
+      }
     >
       <VideoDragDropUploader
         workspaceId={workspaceId}
@@ -184,17 +152,17 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
             {workspace.description && (
               <p className="text-muted-foreground mt-1">{workspace.description}</p>
             )}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <FolderOpen className="h-3.5 w-3.5" />
-              {pipelineItems.length} videos
-            </span>
-            <span className="flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" />
-              {workspace._count.members + 1} members
-            </span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <FolderOpen className="h-3.5 w-3.5" />
+                {pipelineItems.length} videos
+              </span>
+              <span className="flex items-center gap-1">
+                <Users className="h-3.5 w-3.5" />
+                {workspace._count.members + 1} members
+              </span>
+            </div>
           </div>
-        </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
           {isAdmin && (
@@ -229,7 +197,6 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           📦 Archive ({archivedCount})
         </Link>
       </div>
-
     </div>
   );
 }

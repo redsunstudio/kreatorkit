@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { VideoType } from '@prisma/client';
 import { auth, checkWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
@@ -38,8 +39,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await request.json().catch(() => null);
     const title = typeof body?.title === 'string' ? body.title.trim() : '';
     const brief = typeof body?.brief === 'string' ? body.brief.trim() : '';
+    const description = typeof body?.description === 'string' ? body.description.trim() : '';
+    const videoType = typeof body?.videoType === 'string' ? body.videoType : 'LONGFORM';
     if (!title) return apiErrors.badRequest('Title is required');
     if (title.length > 200) return apiErrors.badRequest('Title must be 200 characters or fewer');
+    if (!(Object.values(VideoType) as string[]).includes(videoType)) {
+      return apiErrors.badRequest(
+        'videoType must be one of ' + Object.values(VideoType).join(', ')
+      );
+    }
 
     let project = await db.project.findFirst({
       where: { workspaceId },
@@ -69,6 +77,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: {
         title,
         brief: brief || null,
+        description: description || null,
+        videoType: videoType as VideoType,
         status: 'IDEA',
         projectId: project.id,
         position: (last?.position ?? -1) + 1,

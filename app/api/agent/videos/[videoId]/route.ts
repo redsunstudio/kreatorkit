@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { VideoStatus } from '@prisma/client';
+import { VideoStatus, VideoType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { isAgentRequest } from '@/lib/agent-auth';
@@ -69,7 +69,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         id: video.id,
         title: video.title,
         status: video.status,
+        videoType: video.videoType,
         brief: video.brief,
+        description: video.description,
         thumbnailUrl: video.thumbnailUrl ? `${base}${video.thumbnailUrl}` : null,
         projectId: video.project.id,
         workspaceId: video.project.workspaceId,
@@ -85,8 +87,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PATCH /api/agent/videos/[videoId] { status?, brief? } — automation write-back
-// (e.g. mark PUBLISHED after the social pipeline ships it).
+// PATCH /api/agent/videos/[videoId] { status?, brief?, description?, videoType? }
+// — automation write-back (e.g. mark PUBLISHED after the social pipeline ships it).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     if (!isAgentRequest(request)) return apiErrors.unauthorized();
@@ -94,17 +96,31 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json().catch(() => null);
     const status = body?.status;
     const brief = body?.brief;
+    const description = body?.description;
+    const videoType = body?.videoType;
 
     if (status !== undefined && !(Object.values(VideoStatus) as string[]).includes(status)) {
       return apiErrors.badRequest('unknown status');
     }
+    if (videoType !== undefined && !(Object.values(VideoType) as string[]).includes(videoType)) {
+      return apiErrors.badRequest(
+        'videoType must be one of ' + Object.values(VideoType).join(', ')
+      );
+    }
     if (brief !== undefined && brief !== null && typeof brief !== 'string') {
       return apiErrors.badRequest('brief must be a string');
+    }
+    if (description !== undefined && description !== null && typeof description !== 'string') {
+      return apiErrors.badRequest('description must be a string');
     }
 
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;
-    if (brief !== undefined) updateData.brief = brief === null ? null : String(brief).trim() || null;
+    if (videoType !== undefined) updateData.videoType = videoType;
+    if (brief !== undefined)
+      updateData.brief = brief === null ? null : String(brief).trim() || null;
+    if (description !== undefined)
+      updateData.description = description === null ? null : String(description).trim() || null;
     if (Object.keys(updateData).length === 0) return apiErrors.badRequest('nothing to update');
 
     const video = await db.video.update({ where: { id: videoId }, data: updateData });

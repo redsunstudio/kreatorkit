@@ -119,6 +119,14 @@ enum VideoStatus {
   ARCHIVED
 }
 
+// What kind of deliverable this item is — drives publish defaults
+// (SHORT = vertical YouTube Short; PODCAST/LONGFORM = regular upload).
+enum VideoType {
+  PODCAST
+  LONGFORM
+  SHORT
+}
+
 model DownloadEgressEvent {
   id               String               @id @default(cuid())
   versionId        String
@@ -195,6 +203,9 @@ model Workspace {
   brandAccent  String?
   brandLogoUrl String?
   coverKey     String?
+
+  // Publish wiring — e.g. { "zernio": { "youtubeAccountId": "..." } }
+  publishing   Json?
   
   // Ownership
   ownerId     String
@@ -356,6 +367,7 @@ model Video {
 
   // KreatorKit production pipeline
   status       VideoStatus @default(REVIEW)
+  videoType    VideoType   @default(LONGFORM)
   brief        String?     @db.Text
   thumbnailUrl String?
   

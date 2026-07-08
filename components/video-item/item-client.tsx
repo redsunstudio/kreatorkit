@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { PIPELINE_STAGES, stageOf } from '@/components/pipeline-board';
+import { VIDEO_TYPES } from '@/lib/video-type';
 
 interface ItemVersion {
   id: string;
@@ -50,7 +51,9 @@ interface ItemVideo {
   projectId: string;
   title: string;
   status: string;
+  videoType: string;
   brief: string | null;
+  description: string | null;
   thumbnailUrl: string | null;
   versions: ItemVersion[];
 }
@@ -69,6 +72,7 @@ interface VideoItemClientProps {
   workspaceId: string;
   video: ItemVideo;
   canEdit: boolean;
+  publishReady?: boolean;
 }
 
 function fmtSize(b?: string | number | null): string {
@@ -85,15 +89,31 @@ function KindIcon({ kind }: { kind: string }) {
   return <FileIcon className={cls} />;
 }
 
-export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClientProps) {
+export function VideoItemClient({
+  workspaceId,
+  video,
+  canEdit,
+  publishReady,
+}: VideoItemClientProps) {
   const router = useRouter();
   const [status, setStatus] = useState(video.status);
+  const [videoType, setVideoType] = useState(video.videoType);
   const [brief, setBrief] = useState(video.brief ?? '');
+  const [description, setDescription] = useState(video.description ?? '');
   const [thumbnailUrl, setThumbnailUrl] = useState(video.thumbnailUrl);
-  const [briefState, setBriefState] = useState<'idle' | 'typing' | 'saving' | 'saved' | 'error'>('idle');
+  const [briefState, setBriefState] = useState<'idle' | 'typing' | 'saving' | 'saved' | 'error'>(
+    'idle'
+  );
   const briefTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedBrief = useRef(video.brief ?? '');
+  const [descState, setDescState] = useState<'idle' | 'typing' | 'saving' | 'saved' | 'error'>(
+    'idle'
+  );
+  const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedDesc = useRef(video.description ?? '');
   const [movingStatus, setMovingStatus] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishing, setPublishing] = useState<'draft' | 'now' | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [uploads, setUploads] = useState<{ name: string; pct: number; state: string }[]>([]);
@@ -199,6 +219,71 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
     void persistBrief(brief);
   }
 
+  async function persistDescription(value: string) {
+    if (value.trim() === lastSavedDesc.current.trim()) {
+      setDescState('idle');
+      return;
+    }
+    setDescState('saving');
+    try {
+      await patchItem({ description: value.trim() || null });
+      lastSavedDesc.current = value;
+      setDescState('saved');
+      setTimeout(() => setDescState((st) => (st === 'saved' ? 'idle' : st)), 2000);
+    } catch {
+      setDescState('error');
+    }
+  }
+
+  function onDescriptionChange(value: string) {
+    setDescription(value);
+    setDescState('typing');
+    if (descTimer.current) clearTimeout(descTimer.current);
+    descTimer.current = setTimeout(() => void persistDescription(value), 1200);
+  }
+
+  function onDescriptionBlur() {
+    if (descTimer.current) clearTimeout(descTimer.current);
+    void persistDescription(description);
+  }
+
+  async function changeType(next: string) {
+    const prev = videoType;
+    setVideoType(next);
+    try {
+      await patchItem({ videoType: next });
+    } catch {
+      setVideoType(prev);
+      toast.error('Could not change the type');
+    }
+  }
+
+  async function publish(mode: 'draft' | 'now') {
+    setPublishing(mode);
+    try {
+      const r = await fetch(`/api/videos/${video.id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publishNow: mode === 'now' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error?.message || 'Publishing failed');
+      if (d.data.mode === 'published') {
+        setStatus('PUBLISHED');
+        toast.success('Published to YouTube 🚀');
+      } else {
+        toast.success('Draft created in Zernio — confirm the thumbnail there, then publish');
+      }
+      setPublishOpen(false);
+      await loadNotes();
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Publishing failed');
+    } finally {
+      setPublishing(null);
+    }
+  }
+
   async function putWithRetry(
     url: string,
     file: File,
@@ -250,7 +335,8 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileName: file.name, contentType: file.type, sizeBytes: file.size }),
       });
-      if (!initRes.ok) throw new Error((await initRes.json())?.error?.message || 'upload init failed');
+      if (!initRes.ok)
+        throw new Error((await initRes.json())?.error?.message || 'upload init failed');
       const init = (await initRes.json()).data;
       await putWithRetry(init.presignedPutUrl, file, init.contentType || file.type, onPct);
       const fin = await fetch(`/api/videos/${video.id}/assets`, {
@@ -272,7 +358,8 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileName: file.name, contentType: file.type, sizeBytes: file.size }),
     });
-    if (!initRes.ok) throw new Error((await initRes.json())?.error?.message || 'upload init failed');
+    if (!initRes.ok)
+      throw new Error((await initRes.json())?.error?.message || 'upload init failed');
     const init = (await initRes.json()).data;
     await putWithRetry(init.presignedPutUrl, file, init.contentType || file.type, onPct);
     const fin = await fetch(`/api/videos/${video.id}/assets`, {
@@ -353,7 +440,8 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileName: file.name, contentType: file.type, sizeBytes: file.size }),
       });
-      if (!initRes.ok) throw new Error((await initRes.json())?.error?.message || 'upload init failed');
+      if (!initRes.ok)
+        throw new Error((await initRes.json())?.error?.message || 'upload init failed');
       const init = (await initRes.json()).data;
       await putWithRetry(init.presignedPutUrl, file, init.contentType || file.type, (pct) =>
         setUploadingCut(`${pct}%`)
@@ -370,9 +458,15 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
           setActive: true,
         }),
       });
-      if (!fin.ok) throw new Error((await fin.json())?.error?.message || 'could not create the version');
+      if (!fin.ok)
+        throw new Error((await fin.json())?.error?.message || 'could not create the version');
       toast.success('New cut uploaded — moved to review');
-      setStatus((s) => (['IDEA', 'FILMED', 'EDITING'].includes(stageOf(s)) || ['IDEA', 'EDITING'].includes(stageOf(s)) ? 'REVIEW' : s));
+      setStatus((s) =>
+        ['IDEA', 'FILMED', 'EDITING'].includes(stageOf(s)) ||
+        ['IDEA', 'EDITING'].includes(stageOf(s))
+          ? 'REVIEW'
+          : s
+      );
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Cut upload failed');
@@ -391,7 +485,9 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
       if (!r.ok) throw new Error(d?.error?.message || 'Could not archive');
       toast.success(
         `Archived — ${d.data.assetsCleared} asset${d.data.assetsCleared === 1 ? '' : 's'} cleared` +
-          (d.data.versionsCleared > 0 ? `, ${d.data.versionsCleared} old cut file${d.data.versionsCleared === 1 ? '' : 's'} removed` : '')
+          (d.data.versionsCleared > 0
+            ? `, ${d.data.versionsCleared} old cut file${d.data.versionsCleared === 1 ? '' : 's'} removed`
+            : '')
       );
       setArchiveOpen(false);
       await loadAssets();
@@ -464,7 +560,24 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
               📦 Archive video
             </Button>
           )}
+          {canEdit && publishReady && ['APPROVED', 'PUBLISHED'].includes(stageOf(status)) && (
+            <Button size="sm" onClick={() => setPublishOpen(true)}>
+              🚀 Publish
+            </Button>
+          )}
           {movingStatus && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <Select value={videoType} onValueChange={changeType} disabled={!canEdit}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VIDEO_TYPES.map((t) => (
+                <SelectItem key={t.key} value={t.key}>
+                  {t.emoji} {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={stageOf(status)} onValueChange={changeStatus} disabled={!canEdit}>
             <SelectTrigger className="w-[150px]">
               <SelectValue />
@@ -574,6 +687,34 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
                 )}
               </p>
             )}
+
+            <div className="border-t pt-3">
+              <p className="text-sm font-medium mb-1">Description</p>
+              <Textarea
+                value={description}
+                onChange={(e) => onDescriptionChange(e.target.value)}
+                onBlur={onDescriptionBlur}
+                placeholder="The YouTube description — written here, shipped with the video on publish…"
+                rows={5}
+                maxLength={5000}
+                disabled={!canEdit}
+                className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0 focus-visible:border-0 text-[15px] leading-relaxed resize-none placeholder:text-muted-foreground/50"
+              />
+              {canEdit && (
+                <p className="text-xs text-muted-foreground min-h-[1rem]" aria-live="polite">
+                  {descState === 'saving' && 'Saving…'}
+                  {descState === 'saved' && '✓ Saved'}
+                  {descState === 'error' && (
+                    <button
+                      className="underline"
+                      onClick={() => void persistDescription(description)}
+                    >
+                      Save failed — tap to retry
+                    </button>
+                  )}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -704,7 +845,6 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
         </CardContent>
       </Card>
 
-
       {/* Notes — item-level discussion (review comments live on the cuts) */}
       <Card>
         <CardHeader className="pb-3">
@@ -734,7 +874,9 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
                         })}
                       </span>
                     </div>
-                    <p className="text-sm text-foreground/90 whitespace-pre-wrap mt-0.5">{n.body}</p>
+                    <p className="text-sm text-foreground/90 whitespace-pre-wrap mt-0.5">
+                      {n.body}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -769,9 +911,9 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this video?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes &quot;{video.title}&quot; — every cut, comment, asset and
-              its files in storage. This can&apos;t be undone. To free storage but keep the
-              record, use Archive instead.
+              This permanently removes &quot;{video.title}&quot; — every cut, comment, asset and its
+              files in storage. This can&apos;t be undone. To free storage but keep the record, use
+              Archive instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -788,14 +930,42 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={publishOpen} onOpenChange={(o) => !publishing && setPublishOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publish to YouTube</AlertDialogTitle>
+            <AlertDialogDescription>
+              The current cut ships to YouTube via Zernio with this title and description.
+              &quot;Draft in Zernio&quot; parks it there for a final check (recommended — thumbnails
+              need confirming in Zernio). &quot;Publish now&quot; sends it straight to the channel.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={publishing !== null}>Cancel</AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClick={() => void publish('draft')}
+              disabled={publishing !== null}
+            >
+              {publishing === 'draft' ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : '📤 '}
+              Draft in Zernio
+            </Button>
+            <Button onClick={() => void publish('now')} disabled={publishing !== null}>
+              {publishing === 'now' ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : '🚀 '}
+              Publish now
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Archive this video?</AlertDialogTitle>
             <AlertDialogDescription>
-              Warning: this clears all assets for this video and all prior versions aside from
-              the approved version. The thumbnail, the brief and the final cut with its comments
-              remain. This can&apos;t be undone.
+              Warning: this clears all assets for this video and all prior versions aside from the
+              approved version. The thumbnail, the brief and the final cut with its comments remain.
+              This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

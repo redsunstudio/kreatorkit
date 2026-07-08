@@ -1,4 +1,4 @@
-import { VideoStatus } from '@prisma/client';
+import { VideoStatus, VideoType } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
@@ -181,7 +181,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { title, description, position, status, brief, thumbnailUrl } = body;
+    const { title, description, position, status, brief, thumbnailUrl, videoType } = body;
 
     // Validate types before using string methods to prevent type confusion attacks
     if (
@@ -195,11 +195,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (status !== undefined && !VIDEO_STATUSES.includes(status)) {
       return apiErrors.badRequest('status must be one of ' + VIDEO_STATUSES.join(', '));
     }
+    if (videoType !== undefined && !(Object.values(VideoType) as string[]).includes(videoType)) {
+      return apiErrors.badRequest(
+        'videoType must be one of ' + Object.values(VideoType).join(', ')
+      );
+    }
     if (brief !== undefined && brief !== null && typeof brief !== 'string') {
       return apiErrors.badRequest('brief must be a string');
     }
     if (thumbnailUrl !== undefined && thumbnailUrl !== null) {
-      if (typeof thumbnailUrl !== 'string' || !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/.test(thumbnailUrl)) {
+      if (
+        typeof thumbnailUrl !== 'string' ||
+        !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/.test(
+          thumbnailUrl
+        )
+      ) {
         return apiErrors.badRequest('thumbnailUrl must be an asset download path');
       }
     }
@@ -209,6 +219,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (typeof description === 'string') updateData.description = description.trim() || null;
     if (position !== undefined) updateData.position = position;
     if (status !== undefined) updateData.status = status;
+    if (videoType !== undefined) updateData.videoType = videoType;
     if (brief !== undefined) updateData.brief = brief === null ? null : brief.trim() || null;
     if (thumbnailUrl !== undefined) updateData.thumbnailUrl = thumbnailUrl;
 
