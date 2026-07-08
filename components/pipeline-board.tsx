@@ -39,6 +39,7 @@ export const PIPELINE_STAGES = [
   { key: 'APPROVED', label: 'Approved', emoji: '✅' },
   { key: 'PUBLISHED', label: 'Published', emoji: '🚀' },
   { key: 'REJECTED', label: 'Rejected', emoji: '❌' },
+  { key: 'ARCHIVED', label: 'Archived', emoji: '📦' },
 ] as const;
 
 // Retired stages still present on old rows map into the nearest live stage.
@@ -56,6 +57,7 @@ const STAGE_CHIP: Record<StageKey, string> = {
   APPROVED: 'bg-green-500/10 text-green-400 border-green-500/30',
   PUBLISHED: 'bg-green-700/15 text-green-500 border-green-700/40',
   REJECTED: 'bg-red-500/10 text-red-400 border-red-500/30',
+  ARCHIVED: 'bg-white/5 text-muted-foreground border-white/10',
 };
 
 const STAGE_COL: Record<StageKey, string> = {
@@ -65,6 +67,7 @@ const STAGE_COL: Record<StageKey, string> = {
   APPROVED: 'bg-green-500/[0.05]',
   PUBLISHED: 'bg-green-700/[0.06]',
   REJECTED: 'bg-red-500/[0.05]',
+  ARCHIVED: 'bg-white/[0.02]',
 };
 
 const STAGE_DOT: Record<StageKey, string> = {
@@ -74,6 +77,7 @@ const STAGE_DOT: Record<StageKey, string> = {
   APPROVED: 'bg-green-500',
   PUBLISHED: 'bg-green-700',
   REJECTED: 'bg-red-500',
+  ARCHIVED: 'bg-zinc-600',
 };
 
 export function stageOf(status: string): StageKey {
@@ -317,7 +321,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
     <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
       {PIPELINE_STAGES.map((stage) => {
         const stageItems = items.filter((v) => stageOf(v.status) === stage.key);
-        if (stageItems.length === 0 && ['PUBLISHED', 'REJECTED'].includes(stage.key)) return null;
+        if (stageItems.length === 0 && ['PUBLISHED', 'REJECTED', 'ARCHIVED'].includes(stage.key)) return null;
         return (
           <div
             key={stage.key}

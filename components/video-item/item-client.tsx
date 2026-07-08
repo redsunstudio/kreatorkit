@@ -18,6 +18,16 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -89,6 +99,8 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
   const [uploads, setUploads] = useState<{ name: string; pct: number; state: string }[]>([]);
   const [uploadingCut, setUploadingCut] = useState<string | null>(null);
   const [uploadingThumb, setUploadingThumb] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const footageInput = useRef<HTMLInputElement>(null);
   const cutInput = useRef<HTMLInputElement>(null);
   const thumbInput = useRef<HTMLInputElement>(null);
@@ -356,6 +368,30 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
     }
   }
 
+  async function archiveVideo() {
+    setArchiving(true);
+    try {
+      const r = await fetch(`/api/projects/${video.projectId}/videos/${video.id}/archive`, {
+        method: 'POST',
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error?.message || 'Could not archive');
+      toast.success(
+        `Archived — ${d.data.assetsCleared} asset${d.data.assetsCleared === 1 ? '' : 's'} cleared` +
+          (d.data.versionsCleared > 0 ? `, ${d.data.versionsCleared} old cut file${d.data.versionsCleared === 1 ? '' : 's'} removed` : '')
+      );
+      setArchiveOpen(false);
+      await loadAssets();
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not archive');
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  const archiveEligible = canEdit && ['ARCHIVED', 'REJECTED'].includes(status);
+
   const activeVersion = video.versions.find((v) => v.isActive) ?? video.versions[0];
 
   return (
@@ -364,6 +400,11 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
         <h1 className="text-2xl font-bold tracking-tight">{video.title}</h1>
         <div className="flex items-center gap-2">
+          {archiveEligible && (
+            <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)}>
+              📦 Archive video
+            </Button>
+          )}
           {movingStatus && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           <Select value={stageOf(status)} onValueChange={changeStatus} disabled={!canEdit}>
             <SelectTrigger className="w-[150px]">
@@ -602,6 +643,26 @@ export function VideoItemClient({ workspaceId, video, canEdit }: VideoItemClient
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Warning: this clears all assets for this video and all prior versions aside from
+              the approved version. The thumbnail, comments and brief remain. This can&apos;t be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={archiveVideo} disabled={archiving}>
+              {archiving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+              Archive video
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

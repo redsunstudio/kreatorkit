@@ -114,6 +114,7 @@ enum VideoStatus {
   APPROVED
   PUBLISHED
   REJECTED
+  ARCHIVED
 }
 
 model DownloadEgressEvent {
