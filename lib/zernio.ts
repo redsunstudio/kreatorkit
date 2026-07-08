@@ -120,6 +120,22 @@ export interface ZernioPlatformTarget {
   platformSpecificData?: Record<string, unknown>;
 }
 
+/** Post + per-platform status (used to catch instant failures after publishNow). */
+export async function zernioGetPostStatus(
+  postId: string,
+  apiKey: string
+): Promise<{ status: string | null; platformStatus: string | null; platformError: string | null }> {
+  const raw = await zernioFetch(`/posts/${postId}`, undefined, apiKey);
+  const body = (raw.post ?? raw.data ?? raw) as Record<string, unknown>;
+  const platforms = (body.platforms ?? []) as Record<string, unknown>[];
+  const p = platforms[0] ?? {};
+  return {
+    status: typeof body.status === 'string' ? body.status : null,
+    platformStatus: typeof p.status === 'string' ? p.status : null,
+    platformError: p.error ? String(p.error).slice(0, 300) : null,
+  };
+}
+
 export async function zernioCreatePost(
   payload: {
     content: string;

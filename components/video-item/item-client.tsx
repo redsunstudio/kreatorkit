@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { PIPELINE_STAGES, stageOf } from '@/components/pipeline-board';
-import { VIDEO_TYPES } from '@/lib/video-type';
+import { VIDEO_TYPES, typeMeta } from '@/lib/video-type';
 
 interface ItemVersion {
   id: string;
@@ -132,6 +132,7 @@ export function VideoItemClient({
   >([]);
   const [noteDraft, setNoteDraft] = useState('');
   const [postingNote, setPostingNote] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState<string | null>(null);
   const footageInput = useRef<HTMLInputElement>(null);
   const cutInput = useRef<HTMLInputElement>(null);
   const thumbInput = useRef<HTMLInputElement>(null);
@@ -535,6 +536,21 @@ export function VideoItemClient({
     }
   }
 
+  /** Sequential download of every handoff asset (browser may ask once to allow multiple). */
+  async function downloadAll() {
+    for (let i = 0; i < assets.length; i++) {
+      setDownloadingAll(`${i + 1}/${assets.length}…`);
+      const a = document.createElement('a');
+      a.href = `/api/videos/${video.id}/assets/${assets[i].id}/download`;
+      a.download = assets[i].displayName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      await new Promise((r) => setTimeout(r, 900));
+    }
+    setDownloadingAll(null);
+  }
+
   async function postNote() {
     const body = noteDraft.trim();
     if (!body) return;
@@ -561,92 +577,150 @@ export function VideoItemClient({
 
   return (
     <div className="space-y-6">
-      {/* Title + status */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-        {editingTitle ? (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <input
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveTitle();
-                if (e.key === 'Escape') {
-                  setEditingTitle(false);
-                  setTitleDraft(title);
-                }
-              }}
-              maxLength={200}
-              autoFocus
-              className="flex-1 min-w-0 bg-transparent text-2xl font-bold tracking-tight border-b border-primary/50 focus:outline-none"
-            />
-            <Button size="sm" onClick={() => void saveTitle()} disabled={savingTitle}>
-              {savingTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
-            </Button>
-          </div>
-        ) : (
-          <h1 className="text-2xl font-bold tracking-tight group flex items-center gap-2 min-w-0">
-            <span className="truncate">{title}</span>
-            {canEdit && (
-              <button
-                className="text-muted-foreground/50 hover:text-foreground text-base transition-colors flex-none"
-                title="Rename"
-                onClick={() => {
-                  setTitleDraft(title);
-                  setEditingTitle(true);
-                }}
-              >
-                ✏️
-              </button>
-            )}
-          </h1>
-        )}
-        <div className="flex items-center gap-2">
+      {/* YouTube-preview hero: thumbnail + full title */}
+      <div className="flex flex-col sm:flex-row gap-5">
+        <div className="sm:w-[340px] flex-none">
           {canEdit && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => setDeleteOpen(true)}
+            <input
+              ref={thumbInput}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void uploadThumbnail(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          )}
+          {thumbnailUrl ? (
+            <div className="relative group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={thumbnailUrl.includes('?') ? thumbnailUrl : `${thumbnailUrl}?inline=1`}
+                alt="Thumbnail"
+                className="rounded-xl border w-full aspect-video object-cover"
+              />
+              {canEdit && (
+                <button
+                  className="absolute bottom-2 right-2 rounded-md bg-black/70 backdrop-blur px-2.5 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => thumbInput.current?.click()}
+                  disabled={uploadingThumb}
+                >
+                  {uploadingThumb ? 'Uploading…' : 'Replace'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              className="rounded-xl border border-dashed w-full aspect-video flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-white/25 transition-colors"
+              onClick={() => canEdit && thumbInput.current?.click()}
+              disabled={!canEdit || uploadingThumb}
             >
-              🗑️ Delete
-            </Button>
+              {uploadingThumb ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              {canEdit ? 'Upload thumbnail' : 'No thumbnail yet'}
+            </button>
           )}
-          {archiveEligible && (
-            <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)}>
-              📦 Archive video
-            </Button>
-          )}
-          {canEdit && publishReady && video.versions.length > 0 && (
-            <Button size="sm" onClick={() => setPublishOpen(true)}>
-              📺 Push to YouTube
-            </Button>
-          )}
-          {movingStatus && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          <Select value={videoType} onValueChange={changeType} disabled={!canEdit}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {VIDEO_TYPES.map((t) => (
-                <SelectItem key={t.key} value={t.key}>
-                  {t.emoji} {t.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={stageOf(status)} onValueChange={changeStatus} disabled={!canEdit}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PIPELINE_STAGES.map((s) => (
-                <SelectItem key={s.key} value={s.key}>
-                  {s.emoji} {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
+        <div className="min-w-0 flex-1 flex flex-col justify-center gap-2">
+          {editingTitle ? (
+            <div className="flex items-start gap-2">
+              <input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveTitle();
+                  if (e.key === 'Escape') {
+                    setEditingTitle(false);
+                    setTitleDraft(title);
+                  }
+                }}
+                maxLength={200}
+                autoFocus
+                className="flex-1 min-w-0 bg-transparent text-2xl font-bold tracking-tight border-b border-primary/50 focus:outline-none"
+              />
+              <Button size="sm" onClick={() => void saveTitle()} disabled={savingTitle}>
+                {savingTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+              </Button>
+            </div>
+          ) : (
+            <h1 className="text-2xl font-bold tracking-tight leading-snug break-words group">
+              {title}
+              {canEdit && (
+                <button
+                  className="ml-2 align-middle text-muted-foreground/50 hover:text-foreground text-base transition-colors"
+                  title="Rename"
+                  onClick={() => {
+                    setTitleDraft(title);
+                    setEditingTitle(true);
+                  }}
+                >
+                  ✏️
+                </button>
+              )}
+            </h1>
+          )}
+          <p className="text-sm text-muted-foreground font-mono">
+            {typeMeta(videoType).emoji} {typeMeta(videoType).label}
+            {' · '}
+            {video.versions.length > 0
+              ? `v${activeVersion?.versionNumber ?? video.versions.length}`
+              : 'idea'}
+          </p>
+        </div>
+      </div>
+
+      {/* Actions row */}
+      <div className="flex flex-wrap items-center gap-2">
+        {canEdit && publishReady && video.versions.length > 0 && (
+          <Button size="sm" onClick={() => setPublishOpen(true)}>
+            📺 Push to YouTube
+          </Button>
+        )}
+        <Select value={videoType} onValueChange={changeType} disabled={!canEdit}>
+          <SelectTrigger className="w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {VIDEO_TYPES.map((t) => (
+              <SelectItem key={t.key} value={t.key}>
+                {t.emoji} {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={stageOf(status)} onValueChange={changeStatus} disabled={!canEdit}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PIPELINE_STAGES.map((s) => (
+              <SelectItem key={s.key} value={s.key}>
+                {s.emoji} {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {archiveEligible && (
+          <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)}>
+            📦 Archive video
+          </Button>
+        )}
+        {movingStatus && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        <span className="flex-1" />
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            🗑️ Delete
+          </Button>
+        )}
       </div>
 
       {/* Cuts: watch, review, upload new */}
@@ -715,18 +789,41 @@ export function VideoItemClient({
         </CardContent>
       </Card>
 
-      {/* Brief + thumbnail side by side */}
-      <div className="grid gap-6 md:grid-cols-[1fr_260px]">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Brief</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+      {/* Brief + description */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Brief</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={brief}
+            onChange={(e) => onBriefChange(e.target.value)}
+            onBlur={onBriefBlur}
+            placeholder="The angle, the hook, references — anything the shoot or the edit needs to know…"
+            rows={5}
+            maxLength={5000}
+            disabled={!canEdit}
+            className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0 focus-visible:border-0 text-[15px] leading-relaxed resize-none placeholder:text-muted-foreground/50"
+          />
+          {canEdit && (
+            <p className="text-xs text-muted-foreground min-h-[1rem]" aria-live="polite">
+              {briefState === 'saving' && 'Saving…'}
+              {briefState === 'saved' && '✓ Saved'}
+              {briefState === 'error' && (
+                <button className="underline" onClick={() => void persistBrief(brief)}>
+                  Save failed — tap to retry
+                </button>
+              )}
+            </p>
+          )}
+
+          <div className="border-t pt-3">
+            <p className="text-sm font-medium mb-1">Description</p>
             <Textarea
-              value={brief}
-              onChange={(e) => onBriefChange(e.target.value)}
-              onBlur={onBriefBlur}
-              placeholder="The angle, the hook, references — anything the shoot or the edit needs to know…"
+              value={description}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              onBlur={onDescriptionBlur}
+              placeholder="The YouTube description — written here, shipped with the video on publish…"
               rows={5}
               maxLength={5000}
               disabled={!canEdit}
@@ -734,97 +831,21 @@ export function VideoItemClient({
             />
             {canEdit && (
               <p className="text-xs text-muted-foreground min-h-[1rem]" aria-live="polite">
-                {briefState === 'saving' && 'Saving…'}
-                {briefState === 'saved' && '✓ Saved'}
-                {briefState === 'error' && (
-                  <button className="underline" onClick={() => void persistBrief(brief)}>
+                {descState === 'saving' && 'Saving…'}
+                {descState === 'saved' && '✓ Saved'}
+                {descState === 'error' && (
+                  <button
+                    className="underline"
+                    onClick={() => void persistDescription(description)}
+                  >
                     Save failed — tap to retry
                   </button>
                 )}
               </p>
             )}
-
-            <div className="border-t pt-3">
-              <p className="text-sm font-medium mb-1">Description</p>
-              <Textarea
-                value={description}
-                onChange={(e) => onDescriptionChange(e.target.value)}
-                onBlur={onDescriptionBlur}
-                placeholder="The YouTube description — written here, shipped with the video on publish…"
-                rows={5}
-                maxLength={5000}
-                disabled={!canEdit}
-                className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0 focus-visible:border-0 text-[15px] leading-relaxed resize-none placeholder:text-muted-foreground/50"
-              />
-              {canEdit && (
-                <p className="text-xs text-muted-foreground min-h-[1rem]" aria-live="polite">
-                  {descState === 'saving' && 'Saving…'}
-                  {descState === 'saved' && '✓ Saved'}
-                  {descState === 'error' && (
-                    <button
-                      className="underline"
-                      onClick={() => void persistDescription(description)}
-                    >
-                      Save failed — tap to retry
-                    </button>
-                  )}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ImageIcon className="h-4 w-4" />
-              Thumbnail
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={thumbnailUrl.includes('?') ? thumbnailUrl : `${thumbnailUrl}?inline=1`}
-                alt="Thumbnail"
-                className="rounded-lg border w-full aspect-video object-cover"
-              />
-            ) : (
-              <div className="rounded-lg border border-dashed w-full aspect-video flex items-center justify-center text-xs text-muted-foreground">
-                No thumbnail yet
-              </div>
-            )}
-            {canEdit && (
-              <>
-                <input
-                  ref={thumbInput}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    void uploadThumbnail(e.target.files);
-                    e.target.value = '';
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => thumbInput.current?.click()}
-                  disabled={uploadingThumb}
-                >
-                  {uploadingThumb ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4 mr-1.5" />
-                  )}
-                  {thumbnailUrl ? 'Replace thumbnail' : 'Upload thumbnail'}
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Footage handoff — any file type */}
       <Card>
@@ -834,24 +855,37 @@ export function VideoItemClient({
               <Inbox className="h-4 w-4" />
               Footage handoff
             </span>
-            {canEdit && (
-              <>
-                <input
-                  ref={footageInput}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    void uploadFootage(e.target.files);
-                    e.target.value = '';
-                  }}
-                />
-                <Button size="sm" onClick={() => footageInput.current?.click()}>
-                  <Upload className="h-4 w-4 mr-1.5" />
-                  Drop files
+            <span className="flex items-center gap-2">
+              {assets.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void downloadAll()}
+                  disabled={downloadingAll !== null}
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  {downloadingAll ?? 'Download all'}
                 </Button>
-              </>
-            )}
+              )}
+              {canEdit && (
+                <>
+                  <input
+                    ref={footageInput}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void uploadFootage(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button size="sm" onClick={() => footageInput.current?.click()}>
+                    <Upload className="h-4 w-4 mr-1.5" />
+                    Drop files
+                  </Button>
+                </>
+              )}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -938,26 +972,30 @@ export function VideoItemClient({
               ))}
             </div>
           )}
-          <div className="flex gap-2 pt-1">
+          <div className="rounded-xl border bg-white/[0.02] p-3 transition-colors focus-within:border-primary/40">
             <Textarea
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void postNote();
               }}
-              placeholder="Add a note… (⌘↵ to post)"
+              placeholder="Add a note…"
               rows={2}
               maxLength={4000}
-              className="text-sm"
+              className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0 focus-visible:border-0 resize-none text-sm min-h-0 placeholder:text-muted-foreground/50"
             />
-            <Button
-              size="sm"
-              className="self-end"
-              onClick={postNote}
-              disabled={postingNote || !noteDraft.trim()}
-            >
-              {postingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post'}
-            </Button>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[11px] text-muted-foreground font-mono">⌘↵ to post</span>
+              <Button
+                size="sm"
+                className="h-7"
+                variant={noteDraft.trim() ? 'default' : 'ghost'}
+                onClick={postNote}
+                disabled={postingNote || !noteDraft.trim()}
+              >
+                {postingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

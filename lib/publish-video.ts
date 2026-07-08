@@ -11,7 +11,12 @@
 
 import { db } from '@/lib/db';
 import { createPresignedFileGetUrl, createPresignedVideoGetUrl } from '@/lib/r2';
-import { zernioCreatePost, zernioListAccounts, zernioUploadFromUrl } from '@/lib/zernio';
+import {
+  zernioCreatePost,
+  zernioGetPostStatus,
+  zernioListAccounts,
+  zernioUploadFromUrl,
+} from '@/lib/zernio';
 import type { ZernioMediaItem } from '@/lib/zernio';
 
 export type PublishMode = 'studio' | 'draft' | 'live';
@@ -152,13 +157,22 @@ export async function publishVideoToYouTube(
   const cut = video.versions[0];
   const safeName = video.title.replace(/[^A-Za-z0-9 _-]/g, '').trim() || 'video';
   const sourceUrl = await createPresignedVideoGetUrl(cut.videoId, `${safeName}.mp4`, 6 * 3600);
-  const mediaUrl = await zernioUploadFromUrl(
-    sourceUrl,
-    `${safeName}.mp4`,
-    'video/mp4',
-    cut.sizeBytes ? Number(cut.sizeBytes) : undefined,
-    apiKey
-  );
+
+  // ZERO-COPY for immediate publishes: Zernio's worker pulls the cut straight
+  // from our storage via the presigned URL — the push returns in seconds
+  // regardless of file size, nothing relays through the app. Drafts are the
+  // exception: they can sit in Zernio longer than the URL lives, so their
+  // bytes are copied into Zernio's store up front.
+  const mediaUrl =
+    mode === 'draft'
+      ? await zernioUploadFromUrl(
+          sourceUrl,
+          `${safeName}.mp4`,
+          'video/mp4',
+          cut.sizeBytes ? Number(cut.sizeBytes) : undefined,
+          apiKey
+        )
+      : sourceUrl;
 
   // Best-effort thumbnail copy (item thumbnails are stored as R2_FILE assets).
   let thumbnailUrl: string | undefined;
@@ -210,10 +224,33 @@ export async function publishVideoToYouTube(
     apiKey
   );
 
+  // Catch instant validation/ingest failures (bad media URL etc). Zernio keeps
+  // processing after we return — this only surfaces immediate hard failures.
+  let zernioStatus: string | null = null;
+  if (mode !== 'draft' && postId) {
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        const s = await zernioGetPostStatus(postId, apiKey);
+        zernioStatus = s.platformStatus ?? s.status;
+        if (zernioStatus === 'failed' || zernioStatus === 'error') {
+          throw new PublishError(
+            `Zernio could not process the push${s.platformError ? ` — ${s.platformError}` : ''}`,
+            502
+          );
+        }
+        if (zernioStatus === 'published' || zernioStatus === 'posted') break;
+      } catch (e) {
+        if (e instanceof PublishError) throw e;
+        break; // status endpoint hiccup — the push itself was accepted
+      }
+    }
+  }
+
   const by = opts.actorName ? ` — by ${opts.actorName}` : '';
   const noteBody =
     mode === 'studio'
-      ? `📺 Pushed to YouTube${postId ? ` (Zernio post ${postId})` : ''}${by}. It lands in YouTube Studio as a PRIVATE video — set it live from Studio when ready.`
+      ? `📺 Pushed to YouTube${postId ? ` (Zernio post ${postId})` : ''}${by}. YouTube is ingesting it now — it appears in YouTube Studio as a PRIVATE video within a few minutes; set it live from Studio when ready.`
       : mode === 'live'
         ? `🚀 Published to YouTube via Zernio${postId ? ` (post ${postId})` : ''}${by}`
         : `📤 Sent to Zernio as a YouTube draft${postId ? ` (post ${postId})` : ''}${by}. Confirm the thumbnail in Zernio before publishing.`;
