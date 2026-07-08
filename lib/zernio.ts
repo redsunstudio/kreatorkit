@@ -122,14 +122,16 @@ export interface ZernioPlatformTarget {
 
 /** Resolve a LinkedIn profile/company URL into Zernio's clickable mention
  * format: "@[Display Name](urn:li:person:xxx)" — embedded straight into the
- * post copy (the mentions array on POST /posts is reference-only). */
+ * post copy (the mentions array on POST /posts is reference-only). The
+ * endpoint is scoped to a connected LinkedIn account. */
 export async function zernioResolveLinkedInMention(
+  accountId: string,
   profileUrl: string,
   displayName: string,
   apiKey: string
 ): Promise<string | null> {
   const qs = `url=${encodeURIComponent(profileUrl)}&displayName=${encodeURIComponent(displayName)}`;
-  const raw = await zernioFetch(`/linkedin-mentions?${qs}`, undefined, apiKey);
+  const raw = await zernioFetch(`/accounts/${accountId}/linkedin-mentions?${qs}`, undefined, apiKey);
   const nested = (raw.data ?? raw) as Record<string, unknown>;
   const fmt = nested.mentionFormat ?? raw.mentionFormat;
   return typeof fmt === 'string' && fmt ? fmt : null;
