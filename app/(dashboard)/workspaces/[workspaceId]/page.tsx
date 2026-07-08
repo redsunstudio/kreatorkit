@@ -84,8 +84,11 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
       _count: { select: { versions: true } },
     },
   });
-  const activeVideos = workspaceVideos.filter((v) => v.status !== 'ARCHIVED');
-  const archivedCount = workspaceVideos.length - activeVideos.length;
+  // Published + archived items live off the pipeline (Published tab / Archive)
+  const activeVideos = workspaceVideos.filter(
+    (v) => v.status !== 'ARCHIVED' && v.status !== 'PUBLISHED'
+  );
+  const archivedCount = workspaceVideos.filter((v) => v.status === 'ARCHIVED').length;
   const pipelineItems = activeVideos.map((v) => ({
     id: v.id,
     title: v.title,

@@ -1,18 +1,15 @@
 import Link from 'next/link';
-import { MonitorPlay, Inbox, Palette, BarChart3 } from 'lucide-react';
+import { MonitorPlay, Inbox, Palette, BarChart3, Youtube } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  hasModule,
-  KREATORKIT_MODULES,
-  type KreatorKitModule,
-} from '@/lib/workspace-features';
+import { hasModule, KREATORKIT_MODULES, type KreatorKitModule } from '@/lib/workspace-features';
 
 const MODULE_META: Record<
   KreatorKitModule,
   { label: string; href: (id: string) => string; icon: typeof MonitorPlay }
 > = {
-  review: { label: 'Review', href: (id) => `/workspaces/${id}`, icon: MonitorPlay },
+  review: { label: 'Pipeline', href: (id) => `/workspaces/${id}`, icon: MonitorPlay },
   handoff: { label: 'Footage Handoff', href: (id) => `/workspaces/${id}/handoff`, icon: Inbox },
+  published: { label: 'Published', href: (id) => `/workspaces/${id}/published`, icon: Youtube },
   assets: { label: 'Brand assets', href: (id) => `/workspaces/${id}/assets`, icon: Palette },
   reports: { label: 'Reports', href: (id) => `/workspaces/${id}/reports`, icon: BarChart3 },
 };

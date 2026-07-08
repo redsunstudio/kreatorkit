@@ -68,6 +68,12 @@ export function stageOf(status: string): StageKey {
   return (PIPELINE_STAGES.find((s) => s.key === status)?.key ?? 'IDEA') as StageKey;
 }
 
+// Published and archived items leave the pipeline (Published tab / Archive page);
+// both remain selectable as statuses so items can be sent there.
+const PIPELINE_VIEW_STAGES = PIPELINE_STAGES.filter(
+  (s) => !['PUBLISHED', 'ARCHIVED'].includes(s.key)
+);
+
 interface PipelineVideo {
   id: string;
   title: string;
@@ -256,7 +262,7 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
 
   const listView = (
     <div className="space-y-6">
-      {PIPELINE_STAGES.map((stage) => {
+      {PIPELINE_VIEW_STAGES.map((stage) => {
         const stageItems = items.filter((v) => stageOf(v.status) === stage.key);
         if (stageItems.length === 0 && stage.key !== 'IDEA') return null;
         return (
@@ -346,10 +352,9 @@ export function PipelineBoard({ projectId, workspaceId, videos, canEdit }: Pipel
 
   const boardView = (
     <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
-      {PIPELINE_STAGES.map((stage) => {
+      {PIPELINE_VIEW_STAGES.map((stage) => {
         const stageItems = items.filter((v) => stageOf(v.status) === stage.key);
-        if (stageItems.length === 0 && ['PUBLISHED', 'REJECTED', 'ARCHIVED'].includes(stage.key))
-          return null;
+        if (stageItems.length === 0 && stage.key === 'REJECTED') return null;
         return (
           <div
             key={stage.key}

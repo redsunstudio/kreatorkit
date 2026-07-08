@@ -256,9 +256,13 @@ export async function publishVideoToYouTube(
         : `📤 Sent to Zernio as a YouTube draft${postId ? ` (post ${postId})` : ''}${by}. Confirm the thumbnail in Zernio before publishing.`;
   await db.videoNote.create({ data: { videoId: video.id, body: noteBody } });
 
-  if (mode === 'live') {
-    await db.video.update({ where: { id: video.id }, data: { status: 'PUBLISHED' } });
-  }
+  await db.video.update({
+    where: { id: video.id },
+    data: {
+      ...(postId ? { zernioPostId: postId } : {}),
+      ...(mode === 'live' ? { status: 'PUBLISHED' } : {}),
+    },
+  });
 
   return {
     mode,

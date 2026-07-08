@@ -370,6 +370,12 @@ model Video {
   videoType    VideoType   @default(LONGFORM)
   brief        String?     @db.Text
   thumbnailUrl String?
+
+  // Publish trail (filled by the push + the daily published-sync)
+  zernioPostId   String?
+  publishedUrl   String?
+  publishStats   Json?
+  publishStatsAt DateTime?
   
   // Ordering within project
   position    Int      @default(0)

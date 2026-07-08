@@ -120,6 +120,36 @@ export interface ZernioPlatformTarget {
   platformSpecificData?: Record<string, unknown>;
 }
 
+/** Where a published post landed on its platform (YouTube URL etc). */
+export async function zernioGetPostInfo(
+  postId: string,
+  apiKey: string
+): Promise<{ platformPostUrl: string | null; publishedAt: string | null; status: string | null }> {
+  const raw = await zernioFetch(`/posts/${postId}`, undefined, apiKey);
+  const body = (raw.post ?? raw.data ?? raw) as Record<string, unknown>;
+  const p = ((body.platforms ?? []) as Record<string, unknown>[])[0] ?? {};
+  return {
+    platformPostUrl: typeof p.platformPostUrl === 'string' ? p.platformPostUrl : null,
+    publishedAt: typeof p.publishedAt === 'string' ? p.publishedAt : null,
+    status: typeof p.status === 'string' ? p.status : null,
+  };
+}
+
+/** Post analytics snapshot (views/likes/... — zeros until Zernio's own sync runs). */
+export async function zernioGetPostAnalytics(
+  postId: string,
+  apiKey: string
+): Promise<Record<string, number> | null> {
+  const raw = await zernioFetch(`/analytics?postId=${postId}`, undefined, apiKey);
+  const a = raw.analytics;
+  if (!a || typeof a !== 'object') return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(a as Record<string, unknown>)) {
+    if (typeof v === 'number') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** Post + per-platform status (used to catch instant failures after publishNow). */
 export async function zernioGetPostStatus(
   postId: string,
