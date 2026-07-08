@@ -613,6 +613,19 @@ export function VideoItemClient({
     }, 1200);
   }
 
+  /** Mint the public review link and put it on the clipboard. */
+  async function copyReviewLink() {
+    try {
+      const r = await fetch(`/api/videos/${video.id}/review-link`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error?.message || 'Could not create the link');
+      await navigator.clipboard.writeText(d.data.url);
+      toast.success('Review link copied — send it to the client');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create the link');
+    }
+  }
+
   /** Resolve a LinkedIn profile into @[Name](urn) and append it to the copy. */
   async function insertMention() {
     if (!mentionUrl.trim() || !mentionName.trim()) return;
@@ -811,6 +824,11 @@ export function VideoItemClient({
         {canEdit && !isPost && publishReady && video.versions.length > 0 && (
           <Button size="sm" onClick={() => setPublishOpen(true)}>
             📺 Push to YouTube
+          </Button>
+        )}
+        {canEdit && isPost && (
+          <Button size="sm" variant="outline" onClick={() => void copyReviewLink()}>
+            🔗 Review link
           </Button>
         )}
         {canEdit &&
@@ -1149,6 +1167,24 @@ export function VideoItemClient({
               {u.state === 'uploading' && <span>{u.pct}%</span>}
             </div>
           ))}
+          {/* Posts: see the images as they'll appear, not just filenames */}
+          {isPost && assets.some((a) => a.kind === 'IMAGE') && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {assets
+                .filter((a) => a.kind === 'IMAGE')
+                .map((a) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={a.id}
+                    src={`/api/videos/${video.id}/assets/${a.id}/download?inline=1`}
+                    alt={a.displayName}
+                    title={a.displayName}
+                    className="aspect-square w-full rounded-lg border object-cover"
+                    loading="lazy"
+                  />
+                ))}
+            </div>
+          )}
           {!assetsLoaded ? (
             <p className="text-xs text-muted-foreground">Loading assets…</p>
           ) : assets.length === 0 ? (
