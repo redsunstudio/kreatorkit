@@ -7,12 +7,13 @@
  * and are switched on per client.
  */
 
-export const KREATORKIT_MODULES = ['review', 'handoff', 'reports'] as const;
+export const KREATORKIT_MODULES = ['review', 'handoff', 'assets', 'reports'] as const;
 export type KreatorKitModule = (typeof KREATORKIT_MODULES)[number];
 
 const MODULE_DEFAULTS: Record<KreatorKitModule, boolean> = {
   review: true,
   handoff: false,
+  assets: true,
   reports: false,
 };
 

@@ -53,6 +53,7 @@ model User {
   
   @@map("users")
   videoNotes VideoNote[] @relation("VideoNoteAuthor")
+  workspaceAssets WorkspaceAsset[] @relation("WorkspaceAssetUploader")
 }
 
 enum BillingSubscriptionStatus {
@@ -207,6 +208,7 @@ model Workspace {
   members     WorkspaceMember[]
   projects    Project[]
   invitations Invitation[]
+  brandAssets WorkspaceAsset[]
   
   @@index([ownerId])
   @@index([slug])
@@ -377,6 +379,22 @@ model Video {
   @@index([projectId])
   @@index([status])
   @@map("videos")
+}
+
+model WorkspaceAsset {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  displayName  String
+  objectKey    String
+  contentType  String?
+  sizeBytes    BigInt    @default(0)
+  uploadedById String?
+  uploadedBy   User?     @relation("WorkspaceAssetUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@map("workspace_assets")
 }
 
 model VideoNote {

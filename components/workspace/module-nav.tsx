@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MonitorPlay, Inbox, BarChart3 } from 'lucide-react';
+import { MonitorPlay, Inbox, Palette, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   hasModule,
@@ -13,6 +13,7 @@ const MODULE_META: Record<
 > = {
   review: { label: 'Review', href: (id) => `/workspaces/${id}`, icon: MonitorPlay },
   handoff: { label: 'Footage Handoff', href: (id) => `/workspaces/${id}/handoff`, icon: Inbox },
+  assets: { label: 'Brand assets', href: (id) => `/workspaces/${id}/assets`, icon: Palette },
   reports: { label: 'Reports', href: (id) => `/workspaces/${id}/reports`, icon: BarChart3 },
 };
 
