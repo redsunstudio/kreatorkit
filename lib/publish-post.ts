@@ -79,11 +79,19 @@ export async function publishPostToLinkedIn(
     );
   }
 
-  // Resolve media from the item's assets.
+  // Post extras — mentions live inside the copy already (@[Name](urn)).
+  const options = (video.postOptions ?? {}) as {
+    repostUrl?: string;
+    disableLinkPreview?: boolean;
+    firstComment?: string;
+  };
+
+  // Resolve media from the item's assets. A repost carries no media of its
+  // own (Zernio: reshareUrl is mutually exclusive with mediaItems).
   const thumbnailAssetId = video.thumbnailUrl?.match(
     /^\/api\/videos\/[A-Za-z0-9]+\/assets\/([A-Za-z0-9]+)\/download/
   )?.[1];
-  const usable = video.assets.filter((a) => a.id !== thumbnailAssetId);
+  const usable = options.repostUrl ? [] : video.assets.filter((a) => a.id !== thumbnailAssetId);
   const firstVideo = usable.find((a) => a.kind === 'VIDEO');
   const images = usable.filter((a) => a.kind === 'IMAGE').slice(0, 9);
   const firstPdf = usable.find((a) => a.kind === 'FILE' && /\.pdf$/i.test(a.displayName));
@@ -131,12 +139,23 @@ export async function publishPostToLinkedIn(
     mediaKind = 'document';
   }
 
+  const platformSpecificData: Record<string, unknown> = {};
+  if (options.repostUrl) platformSpecificData.reshareUrl = options.repostUrl;
+  if (options.disableLinkPreview) platformSpecificData.disableLinkPreview = true;
+  if (options.firstComment) platformSpecificData.firstComment = options.firstComment.slice(0, 1250);
+
   const scheduledFor = opts.scheduledFor?.trim();
   const { postId } = await zernioCreatePost(
     {
       content: copy,
       mediaItems,
-      platforms: [{ platform: 'linkedin', accountId: cfg.linkedinAccountId }],
+      platforms: [
+        {
+          platform: 'linkedin',
+          accountId: cfg.linkedinAccountId,
+          ...(Object.keys(platformSpecificData).length > 0 ? { platformSpecificData } : {}),
+        },
+      ],
       ...(opts.mode === 'live'
         ? { publishNow: true }
         : scheduledFor

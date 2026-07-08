@@ -378,6 +378,9 @@ model Video {
   publishedUrl   String?
   publishStats   Json?
   publishStatsAt DateTime?
+
+  // BETA post extras — { repostUrl?, disableLinkPreview?, firstComment? }
+  postOptions    Json?
   
   // Ordering within project
   position    Int      @default(0)

@@ -1,4 +1,4 @@
-import { VideoStatus, VideoType } from '@prisma/client';
+import { Prisma, VideoStatus, VideoType } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
@@ -181,7 +181,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { title, description, position, status, brief, thumbnailUrl, videoType } = body;
+    const { title, description, position, status, brief, thumbnailUrl, videoType, postOptions } =
+      body;
 
     // Validate types before using string methods to prevent type confusion attacks
     if (
@@ -222,6 +223,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (videoType !== undefined) updateData.videoType = videoType;
     if (brief !== undefined) updateData.brief = brief === null ? null : brief.trim() || null;
     if (thumbnailUrl !== undefined) updateData.thumbnailUrl = thumbnailUrl;
+    if (postOptions !== undefined) {
+      if (postOptions === null) {
+        updateData.postOptions = Prisma.DbNull;
+      } else {
+        if (typeof postOptions !== 'object' || Array.isArray(postOptions)) {
+          return apiErrors.badRequest('postOptions must be an object');
+        }
+        const clean: Record<string, unknown> = {};
+        if (typeof postOptions.repostUrl === 'string' && postOptions.repostUrl.trim()) {
+          clean.repostUrl = String(postOptions.repostUrl).trim().slice(0, 500);
+        }
+        if (postOptions.disableLinkPreview === true) clean.disableLinkPreview = true;
+        if (typeof postOptions.firstComment === 'string' && postOptions.firstComment.trim()) {
+          clean.firstComment = String(postOptions.firstComment).trim().slice(0, 1250);
+        }
+        updateData.postOptions = Object.keys(clean).length > 0 ? clean : Prisma.DbNull;
+      }
+    }
 
     const updatedVideo = await db.video.update({
       where: { id: videoId },

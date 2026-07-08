@@ -46,6 +46,12 @@ interface ItemVersion {
   isActive: boolean;
 }
 
+interface PostOptions {
+  repostUrl?: string;
+  disableLinkPreview?: boolean;
+  firstComment?: string;
+}
+
 interface ItemVideo {
   id: string;
   projectId: string;
@@ -55,6 +61,7 @@ interface ItemVideo {
   brief: string | null;
   description: string | null;
   thumbnailUrl: string | null;
+  postOptions?: PostOptions | null;
   versions: ItemVersion[];
 }
 
@@ -138,6 +145,12 @@ export function VideoItemClient({
   const [noteDraft, setNoteDraft] = useState('');
   const [postingNote, setPostingNote] = useState(false);
   const [downloadingAll, setDownloadingAll] = useState<string | null>(null);
+  const [postOpts, setPostOpts] = useState<PostOptions>(video.postOptions ?? {});
+  const [postOptsState, setPostOptsState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const postOptsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mentionUrl, setMentionUrl] = useState('');
+  const [mentionName, setMentionName] = useState('');
+  const [insertingMention, setInsertingMention] = useState(false);
   const footageInput = useRef<HTMLInputElement>(null);
   const cutInput = useRef<HTMLInputElement>(null);
   const thumbInput = useRef<HTMLInputElement>(null);
@@ -577,6 +590,54 @@ export function VideoItemClient({
     }
   }
 
+  /** Auto-save the LinkedIn options (repost / link preview / first comment). */
+  function changePostOpts(patch: Partial<PostOptions>) {
+    const next = { ...postOpts, ...patch };
+    setPostOpts(next);
+    setPostOptsState('saving');
+    if (postOptsTimer.current) clearTimeout(postOptsTimer.current);
+    postOptsTimer.current = setTimeout(async () => {
+      try {
+        const payload = {
+          repostUrl: next.repostUrl?.trim() || null,
+          disableLinkPreview: next.disableLinkPreview === true,
+          firstComment: next.firstComment?.trim() || null,
+        };
+        const empty = !payload.repostUrl && !payload.disableLinkPreview && !payload.firstComment;
+        await patchItem({ postOptions: empty ? null : payload });
+        setPostOptsState('saved');
+        setTimeout(() => setPostOptsState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+      } catch {
+        setPostOptsState('error');
+      }
+    }, 1200);
+  }
+
+  /** Resolve a LinkedIn profile into @[Name](urn) and append it to the copy. */
+  async function insertMention() {
+    if (!mentionUrl.trim() || !mentionName.trim()) return;
+    setInsertingMention(true);
+    try {
+      const r = await fetch(`/api/videos/${video.id}/mention`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: mentionUrl.trim(), displayName: mentionName.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error?.message || 'Could not resolve the mention');
+      const fmt = d.data.mentionFormat as string;
+      const joined = description ? `${description.replace(/\s+$/, '')} ${fmt}` : fmt;
+      onDescriptionChange(joined);
+      setMentionUrl('');
+      setMentionName('');
+      toast.success('Mention added to the copy');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not resolve the mention');
+    } finally {
+      setInsertingMention(false);
+    }
+  }
+
   /** Sequential download of every handoff asset (browser may ask once to allow multiple). */
   async function downloadAll() {
     for (let i = 0; i < assets.length; i++) {
@@ -934,6 +995,99 @@ export function VideoItemClient({
           </div>
         </CardContent>
       </Card>
+
+      {/* LinkedIn options — posts only */}
+      {isPost && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>💼 LinkedIn options</span>
+              {canEdit && (
+                <span className="text-xs font-normal text-muted-foreground" aria-live="polite">
+                  {postOptsState === 'saving' && 'Saving…'}
+                  {postOptsState === 'saved' && '✓ Saved'}
+                  {postOptsState === 'error' && 'Save failed'}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">@mention</p>
+              <p className="text-xs text-muted-foreground">
+                Resolves the profile and drops a clickable tag into the copy. The display name must
+                match their LinkedIn name exactly.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  placeholder="Profile or company URL"
+                  value={mentionUrl}
+                  onChange={(e) => setMentionUrl(e.target.value)}
+                  disabled={!canEdit || insertingMention}
+                  className="flex-1 rounded-md border bg-transparent px-3 py-1.5 text-sm"
+                />
+                <input
+                  placeholder="Display name"
+                  value={mentionName}
+                  onChange={(e) => setMentionName(e.target.value)}
+                  disabled={!canEdit || insertingMention}
+                  className="flex-1 rounded-md border bg-transparent px-3 py-1.5 text-sm"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void insertMention()}
+                  disabled={
+                    !canEdit || insertingMention || !mentionUrl.trim() || !mentionName.trim()
+                  }
+                >
+                  {insertingMention ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Insert'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Repost a LinkedIn post</p>
+              <input
+                placeholder="Paste the post link — quote-reshares it (replaces any media)"
+                value={postOpts.repostUrl ?? ''}
+                onChange={(e) => changePostOpts({ repostUrl: e.target.value })}
+                disabled={!canEdit}
+                className="w-full rounded-md border bg-transparent px-3 py-1.5 text-sm"
+              />
+            </div>
+
+            <label className="flex items-center gap-2.5 text-sm cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={postOpts.disableLinkPreview === true}
+                onChange={(e) => changePostOpts({ disableLinkPreview: e.target.checked })}
+                disabled={!canEdit}
+                className="h-4 w-4 rounded border accent-current"
+              />
+              Disable link preview
+            </label>
+
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <p className="text-sm font-medium">First comment</p>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {(postOpts.firstComment ?? '').length}/1250
+                </span>
+              </div>
+              <Textarea
+                placeholder="Posted automatically as the first comment — best place for external links (LinkedIn suppresses link posts)."
+                value={postOpts.firstComment ?? ''}
+                onChange={(e) => changePostOpts({ firstComment: e.target.value.slice(0, 1250) })}
+                rows={3}
+                maxLength={1250}
+                disabled={!canEdit}
+                className="text-sm"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Footage handoff — any file type */}
       <Card>
