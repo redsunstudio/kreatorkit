@@ -1,5 +1,8 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
   CreateBucketCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   GetBucketCorsCommand,
@@ -8,6 +11,7 @@ import {
   PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { VIDEO_OBJECT_KEY_PREFIX } from '@/lib/video-upload-validation';
@@ -455,6 +459,67 @@ export async function deleteR2Object(key: string): Promise<void> {
       Bucket: R2_BUCKET_NAME,
       Key: key,
     })
+  );
+}
+
+// Multipart upload for large cuts: parallel part PUTs beat a single stream
+// on high-RTT paths (measured ~5 Mbps single-stream to B2 eu-central).
+export async function createMultipartVideoUpload(
+  key: string,
+  contentType: string
+): Promise<string> {
+  if (!key.startsWith(VIDEO_OBJECT_KEY_PREFIX)) {
+    throw new Error('Invalid video object key');
+  }
+  const result = await r2Client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      ContentType: contentType,
+    })
+  );
+  if (!result.UploadId) throw new Error('Multipart upload initiation failed');
+  return result.UploadId;
+}
+
+export async function presignVideoUploadPart(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  expiresInSeconds = DEFAULT_PRESIGNED_PUT_TTL_SECONDS
+): Promise<string> {
+  const command = new UploadPartCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+  });
+  return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
+}
+
+export async function completeMultipartVideoUpload(
+  key: string,
+  uploadId: string,
+  parts: { partNumber: number; etag: string }[]
+): Promise<void> {
+  await r2Client.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: parts
+          .slice()
+          .sort((a, b) => a.partNumber - b.partNumber)
+          .map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
+      },
+    })
+  );
+}
+
+export async function abortMultipartVideoUpload(key: string, uploadId: string): Promise<void> {
+  await r2Client.send(
+    new AbortMultipartUploadCommand({ Bucket: R2_BUCKET_NAME, Key: key, UploadId: uploadId })
   );
 }
 

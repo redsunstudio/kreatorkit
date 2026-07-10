@@ -4,7 +4,14 @@ import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { isAgentRequest } from '@/lib/agent-auth';
-import { createPresignedVideoPutUrl, r2Client, R2_BUCKET_NAME } from '@/lib/r2';
+import {
+  createMultipartVideoUpload,
+  completeMultipartVideoUpload,
+  createPresignedVideoPutUrl,
+  presignVideoUploadPart,
+  r2Client,
+  R2_BUCKET_NAME,
+} from '@/lib/r2';
 import {
   buildVideoObjectKey,
   resolveVideoContentType,
@@ -64,6 +71,65 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         successResponse({ presignedPutUrl, objectKey, contentType }),
         'private, no-store'
       );
+    }
+
+    if (body?.initMultipart) {
+      const fileName = String(body.initMultipart.fileName || 'cut.mp4');
+      const contentType = resolveVideoContentType(
+        fileName,
+        typeof body.initMultipart.contentType === 'string'
+          ? body.initMultipart.contentType
+          : undefined
+      );
+      if (!contentType) return apiErrors.badRequest('not a supported video type');
+      let sizeBytes: bigint;
+      try {
+        sizeBytes = BigInt(body.initMultipart.sizeBytes);
+        if (sizeBytes <= BigInt(0) || sizeBytes > MAX_BYTES) throw new Error();
+      } catch {
+        return apiErrors.badRequest('cuts are capped at 5GB');
+      }
+      const partCount = Number(body.initMultipart.partCount);
+      if (!Number.isInteger(partCount) || partCount < 1 || partCount > 200) {
+        return apiErrors.badRequest('partCount must be 1-200');
+      }
+      const ext = getVideoExtensionFromMime(contentType) ?? 'mp4';
+      const objectKey = buildVideoObjectKey(`${randomUUID()}.${ext}`);
+      const uploadId = await createMultipartVideoUpload(objectKey, contentType);
+      const partUrls = await Promise.all(
+        Array.from({ length: partCount }, (_, i) =>
+          presignVideoUploadPart(objectKey, uploadId, i + 1)
+        )
+      );
+      return withCacheControl(
+        successResponse({ objectKey, uploadId, contentType, partUrls }),
+        'private, no-store'
+      );
+    }
+
+    if (body?.completeMultipart) {
+      const objectKey =
+        typeof body.completeMultipart.objectKey === 'string' ? body.completeMultipart.objectKey : '';
+      const uploadId =
+        typeof body.completeMultipart.uploadId === 'string' ? body.completeMultipart.uploadId : '';
+      const parts = Array.isArray(body.completeMultipart.parts) ? body.completeMultipart.parts : [];
+      if (!SAFE_VIDEO_KEY.test(objectKey) || !uploadId || parts.length === 0) {
+        return apiErrors.badRequest('objectKey, uploadId and parts are required');
+      }
+      const shaped = parts.map((p: { partNumber?: unknown; etag?: unknown }) => ({
+        partNumber: Number(p?.partNumber),
+        etag: String(p?.etag || ''),
+      }));
+      if (shaped.some((p: { partNumber: number; etag: string }) => !p.partNumber || !p.etag)) {
+        return apiErrors.badRequest('every part needs partNumber + etag');
+      }
+      await completeMultipartVideoUpload(objectKey, uploadId, shaped);
+      // fall through to the same commit path by reusing the commit body shape
+      body.commit = {
+        objectKey,
+        label: body.completeMultipart.label,
+        duration: body.completeMultipart.duration,
+      };
     }
 
     if (body?.commit) {
