@@ -6,10 +6,6 @@ import {
   CheckCircle2,
   Circle,
   Clock,
-  Download,
-  Eye,
-  EyeOff,
-  FileText,
   FolderOpen,
   Image as ImageIcon,
   Loader2,
@@ -25,7 +21,6 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -250,106 +245,86 @@ export const CommentsPane = memo(function CommentsPane({
             <p className="text-sm font-medium text-primary">Drop image to attach</p>
           </div>
         )}
-        <div className="shrink-0 p-4 border-b lg:cursor-default">
+        <div className="shrink-0 px-4 pt-3 pb-2.5 border-b lg:cursor-default space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 min-w-0 overflow-x-auto">
+            <div className="flex items-center gap-1">
               <Button
                 variant={activePane === 'comments' ? 'default' : 'ghost'}
                 size="sm"
-                className="h-8 shrink-0"
+                className="h-8 px-2.5 gap-1.5"
                 onClick={() => setActivePane('comments')}
+                aria-label={`Comments (${comments.length})`}
+                title="Comments"
               >
-                <MessageSquare className="h-4 w-4 mr-1" />
-                Comments
-                <Badge variant="secondary" className="ml-2">
-                  {comments.length}
-                </Badge>
+                <MessageSquare className="h-4 w-4" />
+                <span className="text-xs font-semibold tabular-nums">{comments.length}</span>
               </Button>
               <Button
                 variant={activePane === 'assets' ? 'default' : 'ghost'}
                 size="sm"
-                className="h-8 shrink-0"
+                className="h-8 px-2.5 gap-1.5"
                 onClick={() => setActivePane('assets')}
+                aria-label={`Assets (${assets.length})`}
+                title="Assets"
               >
-                <FolderOpen className="h-4 w-4 mr-1" />
-                Assets
-                <Badge variant="secondary" className="ml-2">
-                  {assets.length}
-                </Badge>
+                <FolderOpen className="h-4 w-4" />
+                <span className="text-xs font-semibold tabular-nums">{assets.length}</span>
               </Button>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {activePane === 'comments' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      aria-label="Comment options"
-                      title="Comment options"
-                    >
-                      {isExportingCsv || isExportingPdf ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <MoreVertical className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleShowResolved();
-                      }}
-                    >
-                      {showResolved ? (
-                        <EyeOff className="h-4 w-4 mr-2" />
-                      ) : (
-                        <Eye className="h-4 w-4 mr-2" />
-                      )}
-                      {showResolved ? 'Hide resolved' : 'Show resolved'}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      disabled={!activeVersion || isGuest || isExportingCsv || isExportingPdf}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleExportComments('csv');
-                      }}
-                      title={
-                        isGuest
-                          ? 'CSV export requires an authenticated account'
-                          : 'Download comments as CSV'
-                      }
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={!activeVersion || isExportingCsv || isExportingPdf}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleExportComments('pdf');
-                      }}
-                      title="Download comments as PDF"
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      Download PDF
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 lg:hidden"
-                onClick={() => setIsMobileCommentsOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 lg:hidden shrink-0"
+              onClick={() => setIsMobileCommentsOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
+
+          {activePane === 'comments' && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleShowResolved();
+                }}
+                className={cn(
+                  'transition-colors hover:text-foreground',
+                  showResolved && 'text-foreground font-medium'
+                )}
+              >
+                {showResolved ? '✓ Showing resolved' : 'Show resolved'}
+              </button>
+              <span className="text-border">·</span>
+              <button
+                disabled={!activeVersion || isGuest || isExportingCsv || isExportingPdf}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExportComments('csv');
+                }}
+                title={
+                  isGuest
+                    ? 'CSV export requires an authenticated account'
+                    : 'Download comments as CSV'
+                }
+                className="transition-colors hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
+              >
+                {isExportingCsv ? 'Exporting…' : 'Download CSV'}
+              </button>
+              <span className="text-border">·</span>
+              <button
+                disabled={!activeVersion || isExportingCsv || isExportingPdf}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExportComments('pdf');
+                }}
+                title="Download comments as PDF"
+                className="transition-colors hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
+              >
+                {isExportingPdf ? 'Exporting…' : 'Download PDF'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">
