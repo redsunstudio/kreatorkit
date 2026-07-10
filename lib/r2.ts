@@ -8,6 +8,7 @@ import {
   GetBucketCorsCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
@@ -500,15 +501,36 @@ export async function presignVideoUploadPart(
 export async function completeMultipartVideoUpload(
   key: string,
   uploadId: string,
-  parts: { partNumber: number; etag: string }[]
+  parts?: { partNumber: number; etag: string }[]
 ): Promise<void> {
+  let resolved = parts;
+  if (!resolved || resolved.length === 0) {
+    // Browsers can't read part ETags without exposeHeaders CORS — list them here instead.
+    resolved = [];
+    let marker: string | undefined;
+    do {
+      const page = await r2Client.send(
+        new ListPartsCommand({
+          Bucket: R2_BUCKET_NAME,
+          Key: key,
+          UploadId: uploadId,
+          PartNumberMarker: marker,
+        })
+      );
+      for (const p of page.Parts ?? []) {
+        if (p.PartNumber && p.ETag) resolved.push({ partNumber: p.PartNumber, etag: p.ETag });
+      }
+      marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
+    } while (marker);
+    if (resolved.length === 0) throw new Error('No uploaded parts found for this upload');
+  }
   await r2Client.send(
     new CompleteMultipartUploadCommand({
       Bucket: R2_BUCKET_NAME,
       Key: key,
       UploadId: uploadId,
       MultipartUpload: {
-        Parts: parts
+        Parts: resolved
           .slice()
           .sort((a, b) => a.partNumber - b.partNumber)
           .map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
