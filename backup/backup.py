@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.parse
 
 import boto3
 
@@ -33,14 +34,29 @@ def s3():
     )
 
 
+def database_url() -> str:
+    # The app's DATABASE_URL is Prisma-shaped and may carry Prisma-only URI
+    # params (?schema=public) that libpq rejects outright — the reason every
+    # cron run since creation crashed. pg_dump needs the bare URL.
+    url = os.environ["DATABASE_URL"]
+    parts = urllib.parse.urlsplit(url)
+    query = [
+        (k, v)
+        for k, v in urllib.parse.parse_qsl(parts.query)
+        if k not in ("schema", "connection_limit", "pool_timeout", "pgbouncer")
+    ]
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+
+
 def dump_database() -> bytes:
     # Retry: Railway's private-network DNS (postgres.railway.internal) is not
     # ready for the first seconds after a cron container boots, and pg_dump's
     # stderr must be surfaced or failures are undiagnosable from the cron logs.
     attempts = 5
+    url = database_url()
     for attempt in range(1, attempts + 1):
         out = subprocess.run(
-            ["pg_dump", "--no-owner", "--no-privileges", os.environ["DATABASE_URL"]],
+            ["pg_dump", "--no-owner", "--no-privileges", url],
             capture_output=True,
         )
         if out.returncode == 0:
