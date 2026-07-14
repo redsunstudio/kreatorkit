@@ -752,7 +752,12 @@ export function VideoPageContent({
         <style>{`:root, .dark { --primary: ${safeAccent}; --accent: ${safeAccent}; --ring: ${safeAccent}; }`}</style>
       )}
       <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0">
-        <div className={cn('flex-1 w-full flex flex-col min-h-0', isFullscreenMode && 'relative')}>
+        <div
+          className={cn(
+            'flex-1 w-full flex flex-col min-h-0 min-w-0',
+            isFullscreenMode && 'relative'
+          )}
+        >
           {!embed && (
             <VideoPageHeader
               mode={mode}

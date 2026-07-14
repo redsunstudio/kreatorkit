@@ -162,12 +162,14 @@ export const VideoPageHeader = memo(function VideoPageHeader({
       <div className="flex items-center gap-1.5 shrink-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Badge variant="secondary" className="mr-2">
+            <Button variant="outline" size="sm" className="max-w-[13rem] xl:max-w-[19rem]">
+              <Badge variant="secondary" className="mr-2 shrink-0">
                 v{activeVersion.versionNumber}
               </Badge>
-              {activeVersion.versionLabel || `Version ${activeVersion.versionNumber}`}
-              <ChevronDown className="h-4 w-4 ml-2" />
+              <span className="truncate">
+                {activeVersion.versionLabel || `Version ${activeVersion.versionNumber}`}
+              </span>
+              <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
