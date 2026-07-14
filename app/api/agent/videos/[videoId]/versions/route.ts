@@ -26,7 +26,8 @@ interface RouteParams {
 }
 
 const MAX_BYTES = BigInt(5 * 1024 * 1024 * 1024);
-const SAFE_VIDEO_KEY = /^videos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
+const SAFE_VIDEO_KEY =
+  /^videos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 
 // POST /api/agent/videos/[videoId]/versions — the automation cut rail.
 // { init: {fileName, contentType, sizeBytes} } -> presigned PUT for the new cut
@@ -109,7 +110,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (body?.completeMultipart) {
       const objectKey =
-        typeof body.completeMultipart.objectKey === 'string' ? body.completeMultipart.objectKey : '';
+        typeof body.completeMultipart.objectKey === 'string'
+          ? body.completeMultipart.objectKey
+          : '';
       const uploadId =
         typeof body.completeMultipart.uploadId === 'string' ? body.completeMultipart.uploadId : '';
       const parts = Array.isArray(body.completeMultipart.parts) ? body.completeMultipart.parts : [];
@@ -161,34 +164,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const nextVersionNumber = (video.versions[0]?.versionNumber || 0) + 1;
       const filename = objectKey.slice(VIDEO_OBJECT_KEY_PREFIX.length);
 
-      const version = await db.$transaction(async (tx) => {
-        await tx.videoVersion.updateMany({
-          where: { videoParentId: videoId },
-          data: { isActive: false },
-        });
-        // A fresh cut moves pre-review items (incl. sent-back EDITING) into REVIEW.
-        await tx.video.updateMany({
-          where: { id: videoId, status: { in: ['IDEA', 'FILMED', 'EDITING'] } },
-          data: { status: 'REVIEW' },
-        });
-        return tx.videoVersion.create({
-          data: {
-            versionNumber: nextVersionNumber,
-            versionLabel: label || null,
-            providerId: 'r2',
-            videoId: objectKey,
-            originalUrl: videoProxyPathFromFilename(filename),
-            title: label || `Version ${nextVersionNumber}`,
-            thumbnailUrl: '/placeholder-video-thumbnail.png',
-            duration,
-            sizeBytes: contentLength,
-            isActive: true,
-            videoParentId: videoId,
-          },
-        });
-      });
+      // Serializable: two concurrent commits must not both leave isActive=true.
+      const version = await db.$transaction(
+        async (tx) => {
+          await tx.videoVersion.updateMany({
+            where: { videoParentId: videoId },
+            data: { isActive: false },
+          });
+          // A fresh cut moves pre-review items (incl. sent-back EDITING) into REVIEW.
+          await tx.video.updateMany({
+            where: { id: videoId, status: { in: ['IDEA', 'FILMED', 'EDITING'] } },
+            data: { status: 'REVIEW' },
+          });
+          return tx.videoVersion.create({
+            data: {
+              versionNumber: nextVersionNumber,
+              versionLabel: label || null,
+              providerId: 'r2',
+              videoId: objectKey,
+              originalUrl: videoProxyPathFromFilename(filename),
+              title: label || `Version ${nextVersionNumber}`,
+              thumbnailUrl: '/placeholder-video-thumbnail.png',
+              duration,
+              sizeBytes: contentLength,
+              isActive: true,
+              videoParentId: videoId,
+            },
+          });
+        },
+        { isolationLevel: 'Serializable' }
+      );
 
-      const updated = await db.video.findUnique({ where: { id: videoId }, select: { status: true } });
+      const updated = await db.video.findUnique({
+        where: { id: videoId },
+        select: { status: true },
+      });
       return withCacheControl(
         successResponse(
           {

@@ -401,6 +401,8 @@ model Video {
   
   @@index([projectId])
   @@index([status])
+  @@index([projectId, status])
+  @@index([projectId, updatedAt(sort: Desc)])
   @@map("videos")
 }
 

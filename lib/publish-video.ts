@@ -103,7 +103,7 @@ export interface PublishResult {
 
 export async function publishVideoToYouTube(
   videoId: string,
-  opts: { mode?: PublishMode; actorName?: string } = {}
+  opts: { mode?: PublishMode; actorName?: string; force?: boolean } = {}
 ): Promise<PublishResult> {
   const mode: PublishMode = opts.mode ?? 'draft';
 
@@ -129,6 +129,14 @@ export async function publishVideoToYouTube(
   if (!cfg.youtubeAccountId) {
     throw new PublishError(
       'No YouTube channel is wired to this workspace yet — set it in Settings → YouTube publishing'
+    );
+  }
+
+  // Double-push guard: this item already went to Zernio once. Drafts are
+  // harmless; anything that reaches the channel again needs an explicit force.
+  if (video.zernioPostId && mode !== 'draft' && !opts.force) {
+    throw new PublishError(
+      `This video already went to Zernio (post ${video.zernioPostId}) — it may be live or in the client's Studio. Pass force:true only if you really want a second push.`
     );
   }
 

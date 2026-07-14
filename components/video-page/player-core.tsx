@@ -261,7 +261,7 @@ export const PlayerCore = memo(function PlayerCore({
                 <p className="text-xs text-muted-foreground">
                   {activeProviderId === 'r2'
                     ? 'This video file could not be loaded. Try refreshing the page or re-uploading the version.'
-                    : 'The Bunny stream is unavailable right now. Please refresh this page in a moment.'}
+                    : "The video couldn't load. Please refresh this page in a moment."}
                 </p>
               </div>
             </div>

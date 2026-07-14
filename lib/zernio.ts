@@ -7,10 +7,11 @@
 
 const ZERNIO_BASE = 'https://zernio.com/api/v1';
 
-// Files at or under this size are buffered in memory for the copy to Zernio's
-// store; larger files stream. Buffering avoids chunked-encoding rejections on
-// the presigned PUT, so it is the default path for typical cuts.
-const BUFFER_LIMIT_BYTES = 256 * 1024 * 1024;
+// Streaming is the default copy path (buffering N concurrent publishes held
+// N × sizeBytes of heap — the same OOM class the playback routes hit). If a
+// presigned PUT rejects the streamed body (chunked-encoding quirks), files at
+// or under this size get ONE buffered retry; larger files fail loudly.
+const BUFFER_RETRY_LIMIT_BYTES = 64 * 1024 * 1024;
 
 async function zernioFetch(
   path: string,
@@ -97,20 +98,29 @@ export async function zernioUploadFromUrl(
   if (!src.ok || !src.body) throw new Error(`could not read the source file (${src.status})`);
 
   const headers: Record<string, string> = { 'Content-Type': contentType };
-  let body: BodyInit;
-  if (sizeBytes !== undefined && sizeBytes > 0 && sizeBytes <= BUFFER_LIMIT_BYTES) {
-    body = Buffer.from(await src.arrayBuffer());
-  } else {
-    if (sizeBytes) headers['Content-Length'] = String(sizeBytes);
-    body = src.body as unknown as BodyInit;
-  }
-  const put = await fetch(uploadUrl, {
+  if (sizeBytes) headers['Content-Length'] = String(sizeBytes);
+  let put = await fetch(uploadUrl, {
     method: 'PUT',
     headers,
-    body,
+    body: src.body as unknown as BodyInit,
     // @ts-expect-error duplex is required by undici for streaming request bodies
     duplex: 'half',
   });
+  if (
+    !put.ok &&
+    sizeBytes !== undefined &&
+    sizeBytes > 0 &&
+    sizeBytes <= BUFFER_RETRY_LIMIT_BYTES
+  ) {
+    const retrySrc = await fetch(sourceUrl);
+    if (retrySrc.ok && retrySrc.body) {
+      put = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: Buffer.from(await retrySrc.arrayBuffer()),
+      });
+    }
+  }
   if (!put.ok) throw new Error(`Zernio media upload failed (${put.status})`);
   return publicUrl;
 }
@@ -138,7 +148,11 @@ export async function zernioResolveLinkedInMention(
   apiKey: string
 ): Promise<string | null> {
   const qs = `url=${encodeURIComponent(profileUrl)}&displayName=${encodeURIComponent(displayName)}`;
-  const raw = await zernioFetch(`/accounts/${accountId}/linkedin-mentions?${qs}`, undefined, apiKey);
+  const raw = await zernioFetch(
+    `/accounts/${accountId}/linkedin-mentions?${qs}`,
+    undefined,
+    apiKey
+  );
   const nested = (raw.data ?? raw) as Record<string, unknown>;
   const fmt = nested.mentionFormat ?? raw.mentionFormat;
   return typeof fmt === 'string' && fmt ? fmt : null;

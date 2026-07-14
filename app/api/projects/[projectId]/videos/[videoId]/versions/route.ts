@@ -253,7 +253,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             _count: { select: { comments: true } },
           },
         });
-      }
+      },
+      // Serializable: two concurrent commits must not both leave isActive=true.
+      { isolationLevel: 'Serializable' }
     );
 
     // Notify project owner (fire-and-forget, skip if they added it themselves)

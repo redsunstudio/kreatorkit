@@ -37,6 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : 'draft';
     const result = await publishVideoToYouTube(videoId, {
       mode,
+      force: body?.force === true,
       actorName: 'Agency OS',
     });
     return withCacheControl(successResponse(result), 'private, no-store');

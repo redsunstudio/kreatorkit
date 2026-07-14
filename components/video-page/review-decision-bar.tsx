@@ -47,7 +47,7 @@ export function ReviewDecisionBar({
         </span>
       ) : (
         <div className="border-b border-border bg-green-500/10 px-4 py-2 text-center text-sm font-medium text-green-600 dark:text-green-400">
-          ✓ This video is approved and ready for upload
+          ✓ This video is approved — the team will publish it shortly
         </div>
       );
     }

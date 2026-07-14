@@ -8,7 +8,7 @@ import { logError } from '@/lib/logger';
 // Always answers ok so account existence can't be probed.
 export async function POST(request: NextRequest) {
   try {
-    const limited = await rateLimit(request, 'mutate');
+    const limited = await rateLimit(request, 'login');
     if (limited) return limited;
     const body = await request.json().catch(() => null);
     const email = typeof body?.email === 'string' ? body.email : '';

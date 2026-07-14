@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
-import { createPresignedFilePutUrl } from '@/lib/r2';
+import { createPresignedFilePutUrl, safeUploadContentType } from '@/lib/r2';
 import { isS3VideoUploadsEnabled } from '@/lib/feature-flags';
 import { logError } from '@/lib/logger';
 import { enforceStorageQuota } from '@/lib/storage-quota';
@@ -38,11 +38,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json().catch(() => null);
-    const fileName = typeof body?.fileName === 'string' ? sanitizeFileName(body.fileName.trim()) : '';
-    const contentTypeInput =
+    const fileName =
+      typeof body?.fileName === 'string' ? sanitizeFileName(body.fileName.trim()) : '';
+    const contentTypeInput = safeUploadContentType(
       typeof body?.contentType === 'string' && body.contentType.trim()
         ? body.contentType.trim()
-        : 'application/octet-stream';
+        : 'application/octet-stream'
+    );
     if (!fileName) return apiErrors.badRequest('fileName is required');
 
     let sizeBytes: bigint;

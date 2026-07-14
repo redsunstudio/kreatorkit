@@ -75,13 +75,17 @@ export async function verifyLoginCode(rawEmail: string, code: string): Promise<b
     await db.loginCode.deleteMany({ where: { email } });
     return false;
   }
+  // Burn an attempt BEFORE checking the code, atomically gated on the cap —
+  // concurrent wrong guesses can't all slip under MAX_ATTEMPTS.
+  const burned = await db.loginCode.updateMany({
+    where: { id: row.id, attempts: { lt: MAX_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (burned.count === 0) return false;
   const expected = Buffer.from(row.codeHash, 'hex');
   const actual = Buffer.from(hashCode(email, trimmed), 'hex');
   const ok = expected.length === actual.length && timingSafeEqual(expected, actual);
-  if (!ok) {
-    await db.loginCode.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
-    return false;
-  }
+  if (!ok) return false;
   await db.loginCode.deleteMany({ where: { email } });
   return true;
 }

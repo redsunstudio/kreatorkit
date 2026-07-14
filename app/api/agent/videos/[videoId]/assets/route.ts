@@ -3,7 +3,11 @@ import { randomUUID } from 'crypto';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { isAgentRequest } from '@/lib/agent-auth';
-import { createPresignedFilePutUrl, getR2FileObjectMetadata } from '@/lib/r2';
+import {
+  createPresignedFilePutUrl,
+  getR2FileObjectMetadata,
+  safeUploadContentType,
+} from '@/lib/r2';
 import { logError } from '@/lib/logger';
 
 interface RouteParams {
@@ -17,7 +21,10 @@ function sanitizeName(name: string): string {
   return base.replace(/[^A-Za-z0-9._ ()-]/g, '_').slice(0, 160) || 'file';
 }
 
-function kindFor(contentType: string | undefined, name: string): 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' {
+function kindFor(
+  contentType: string | undefined,
+  name: string
+): 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' {
   const ct = contentType ?? '';
   if (ct.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(name)) return 'IMAGE';
   if (ct.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(name)) return 'VIDEO';
@@ -47,10 +54,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (body?.init) {
       const fileName = sanitizeName(String(body.init.fileName || ''));
-      const contentType =
+      const contentType = safeUploadContentType(
         typeof body.init.contentType === 'string' && body.init.contentType.trim()
           ? body.init.contentType.trim()
-          : 'application/octet-stream';
+          : 'application/octet-stream'
+      );
       let sizeBytes: bigint;
       try {
         sizeBytes = BigInt(body.init.sizeBytes);

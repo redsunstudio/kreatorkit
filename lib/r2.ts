@@ -295,6 +295,23 @@ export async function createPresignedVideoPutUrl(
   return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
 }
 
+// The any-file rail accepts arbitrary uploads, but a stored object served with
+// a browser-executable type is an XSS vector — neutralize those to plain bytes.
+const SCRIPTABLE_CONTENT_TYPES = new Set([
+  'text/html',
+  'application/xhtml+xml',
+  'application/javascript',
+  'text/javascript',
+  'image/svg+xml',
+  'application/xml',
+  'text/xml',
+]);
+
+export function safeUploadContentType(contentType: string): string {
+  const normalized = contentType.split(';')[0].trim().toLowerCase();
+  return SCRIPTABLE_CONTENT_TYPES.has(normalized) ? 'application/octet-stream' : contentType;
+}
+
 export async function createPresignedFilePutUrl(
   objectKey: string,
   contentType: string,
@@ -304,7 +321,7 @@ export async function createPresignedFilePutUrl(
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET_NAME,
     Key: objectKey,
-    ContentType: contentType,
+    ContentType: safeUploadContentType(contentType),
     ContentLength: Number(sizeBytes),
   });
   return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
@@ -362,9 +379,7 @@ export async function getR2FileObjectMetadata(key: string): Promise<{
     return null;
   }
   try {
-    const result = await r2Client.send(
-      new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key })
-    );
+    const result = await r2Client.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
     const contentLength =
       typeof result.ContentLength === 'number' && result.ContentLength >= 0
         ? BigInt(result.ContentLength)
