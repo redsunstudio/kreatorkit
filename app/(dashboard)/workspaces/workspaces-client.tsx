@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Plus, Building2, Clock, FolderOpen, Users } from 'lucide-react';
+import { Plus, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
 
 function formatRelativeTime(date: Date): string {
@@ -81,7 +81,7 @@ export function WorkspacesClient({
 
       {/* Workspaces Grid */}
       {workspaces.length > 0 ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {workspaces.map((workspace) => (
             <Link key={workspace.id} href={`/workspaces/${workspace.id}`} className="group">
               <div
@@ -132,7 +132,9 @@ export function WorkspacesClient({
                   <div className="mt-auto flex items-center gap-3 text-xs text-muted-foreground font-mono pt-3">
                     <span>🎬 {workspace.videoCount ?? 0}</span>
                     <span>👥 {workspace._count.members + 1}</span>
-                    <span className="ml-auto">{formatRelativeTime(new Date(workspace.updatedAt))}</span>
+                    <span className="ml-auto">
+                      {formatRelativeTime(new Date(workspace.updatedAt))}
+                    </span>
                   </div>
                 </div>
               </div>

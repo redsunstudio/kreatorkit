@@ -102,6 +102,13 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
     redirect('/dashboard');
   }
 
+  // The projects layer is deprecated: signed-in members always work from the
+  // workspace pipeline. Only unauthenticated guests on public projects still
+  // see this page (share-link flows have no workspace access).
+  if (session?.user?.id) {
+    redirect(`/workspaces/${project.workspaceId}`);
+  }
+
   // Fetch videos separately utilizing bounds
   const [paginatedVideos, totalVideos, allVideoIds] = await Promise.all([
     db.video.findMany({
