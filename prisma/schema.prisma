@@ -222,6 +222,7 @@ model Workspace {
   projects    Project[]
   invitations Invitation[]
   brandAssets WorkspaceAsset[]
+  tasks       WorkspaceTask[]
   
   @@index([ownerId])
   @@index([slug])
@@ -832,6 +833,20 @@ model VideoUploadSession {
   @@index([billedUserId])
   @@index([expiresAt])
   @@map("video_upload_sessions")
+}
+
+model WorkspaceTask {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  text        String    @db.Text
+  done        Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, sortOrder])
+  @@map("workspace_tasks")
 }
 
 // Rate limiting table (created as UNLOGGED via raw SQL migration)

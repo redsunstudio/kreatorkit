@@ -10,6 +10,7 @@ import { ModuleNav } from '@/components/workspace/module-nav';
 import { hasModule } from '@/lib/workspace-features';
 import { PipelineBoard } from '@/components/pipeline-board';
 import { CoverButton } from '@/components/workspace/cover-button';
+import { TaskDrawer } from '@/components/workspace/task-drawer';
 
 interface WorkspacePageProps {
   params: Promise<{ workspaceId: string }>;
@@ -172,6 +173,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           {isAdmin && (
             <>
               <CoverButton workspaceId={workspaceId} />
+              <TaskDrawer workspaceId={workspaceId} accent={workspace.brandAccent} />
               <Button asChild variant="outline" size="sm" className="flex-1 sm:flex-none">
                 <Link href={`/workspaces/${workspaceId}/members`}>
                   <Users className="h-4 w-4 mr-2" />
