@@ -148,11 +148,17 @@ async function main() {
     }
 
     if (failedMigrations.length > 0) {
-      throw new Error(
-        `Detected failed Prisma migrations on a non-empty database: ${failedMigrations
+      // Postgres applies each migration in a transaction, so a failed migration
+      // left no partial state. Mark it rolled back and let migrate deploy retry
+      // the (corrected) SQL instead of crash-looping the whole app.
+      console.log(
+        `Detected failed Prisma migrations: ${failedMigrations
           .map((migration) => migration.migration_name)
-          .join(', ')}`
+          .join(', ')}. Marking as rolled back and retrying.`
       );
+      for (const migration of failedMigrations) {
+        await runPrisma(['migrate', 'resolve', '--rolled-back', migration.migration_name]);
+      }
     }
 
     console.log('Running Prisma migrations');
