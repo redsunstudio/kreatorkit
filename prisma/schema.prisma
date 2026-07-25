@@ -386,6 +386,9 @@ model Video {
   publishStats   Json?
   publishStatsAt DateTime?
 
+  // Storage housekeeping: when old cut files/assets were cleared (status unchanged)
+  storageClearedAt DateTime?
+
   // BETA post extras — { repostUrl?, disableLinkPreview?, firstComment? }
   postOptions    Json?
   

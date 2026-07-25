@@ -67,6 +67,7 @@ interface ItemVideo {
   description: string | null;
   thumbnailUrl: string | null;
   postOptions?: PostOptions | null;
+  storageClearedAt?: string | null;
   versions: ItemVersion[];
 }
 
@@ -174,11 +175,14 @@ export function VideoItemClient({
 
   const loadNotes = useCallback(async () => {
     const r = await fetch(`/api/videos/${video.id}/notes`);
-    if (r.ok) setNotes((await r.json()).data?.notes ?? []);
+    if (!r.ok) return;
+    const d = await r.json();
+    setNotes(d.data?.notes ?? []);
   }, [video.id]);
 
   useEffect(() => {
     void loadAssets();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch-on-mount; setState runs after await, not synchronously
     void loadNotes();
   }, [loadAssets, loadNotes]);
 
@@ -593,7 +597,7 @@ export function VideoItemClient({
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error?.message || 'Could not archive');
       toast.success(
-        `Archived — ${d.data.assetsCleared} asset${d.data.assetsCleared === 1 ? '' : 's'} cleared` +
+        `${cleanupOnly ? 'Space freed' : 'Archived'} — ${d.data.assetsCleared} asset${d.data.assetsCleared === 1 ? '' : 's'} cleared` +
           (d.data.versionsCleared > 0
             ? `, ${d.data.versionsCleared} old cut file${d.data.versionsCleared === 1 ? '' : 's'} removed`
             : '')
@@ -720,7 +724,12 @@ export function VideoItemClient({
     }
   }
 
-  const archiveEligible = canEdit && ['ARCHIVED', 'REJECTED'].includes(status);
+  // Storage cleanup is decoupled from status: Published items can free space
+  // too (old cut files + assets go, the kept cut/thumbnail/comments stay) while
+  // remaining tracked as Published.
+  const archiveEligible =
+    canEdit && ['ARCHIVED', 'REJECTED', 'PUBLISHED'].includes(status) && !video.storageClearedAt;
+  const cleanupOnly = status === 'PUBLISHED';
   const isPost = videoType === 'POST';
   const approvable = ['IDEA', 'EDITING', 'REVIEW'].includes(stageOf(status));
   const [approving, setApproving] = useState(false);
@@ -899,8 +908,13 @@ export function VideoItemClient({
         </Select>
         {archiveEligible && (
           <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)}>
-            📦 Archive video
+            {cleanupOnly ? '🧹 Free up space' : '📦 Archive video'}
           </Button>
+        )}
+        {canEdit && video.storageClearedAt && (
+          <span className="text-xs text-muted-foreground">
+            🧹 Space freed {new Date(video.storageClearedAt).toLocaleDateString()}
+          </span>
         )}
         {movingStatus && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         <span className="flex-1" />
@@ -1605,18 +1619,20 @@ export function VideoItemClient({
       <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive this video?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {cleanupOnly ? 'Free up storage for this video?' : 'Archive this video?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Warning: this clears all assets for this video and all prior versions aside from the
               approved version. The thumbnail, the brief and the final cut with its comments remain.
-              This can&apos;t be undone.
+              {cleanupOnly ? ' The item stays in Published.' : ''} This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={archiving}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={archiveVideo} disabled={archiving}>
               {archiving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
-              Archive video
+              {cleanupOnly ? 'Free up space' : 'Archive video'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -12,10 +12,12 @@ interface RouteParams {
 }
 
 // POST /api/projects/[projectId]/videos/[videoId]/archive
-// Housekeeping: frees storage for a finished (archived/rejected) video.
-// Deletes every asset except the item's thumbnail, and the stored files of
-// every version except the kept (active/latest) cut. Version records, their
-// comments, the brief and the thumbnail all remain.
+// Housekeeping: frees storage for a finished (published/archived/rejected)
+// video. Deletes every asset except the item's thumbnail, and the stored files
+// of every version except the kept (active/latest) cut. Version records, their
+// comments, the brief and the thumbnail all remain. The status is untouched —
+// a Published item stays Published (tracking intact), it just stops paying for
+// old cut files.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const limited = await rateLimit(request, 'mutate');
@@ -38,8 +40,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const access = await checkProjectAccess(video.project, session.user.id, { intent: 'manage' });
     if (!access.canEdit) return apiErrors.forbidden('Access denied');
 
-    if (video.status !== 'ARCHIVED' && video.status !== 'REJECTED') {
-      return apiErrors.badRequest('Only archived or rejected videos can be cleaned up');
+    if (
+      video.status !== 'ARCHIVED' &&
+      video.status !== 'REJECTED' &&
+      video.status !== 'PUBLISHED'
+    ) {
+      return apiErrors.badRequest('Only published, archived or rejected videos can be cleaned up');
     }
 
     // The cut we keep: the active version, else the latest.
@@ -98,6 +104,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         data: { isActive: true },
       });
     }
+    await db.video.update({
+      where: { id: videoId },
+      data: { storageClearedAt: new Date() },
+    });
 
     // Storage cleanup, best effort.
     if (proxyUrlsToDelete.length > 0) {
