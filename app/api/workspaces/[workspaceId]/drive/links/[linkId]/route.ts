@@ -5,7 +5,7 @@ import { rateLimit } from '@/lib/rate-limit';
 import { logError } from '@/lib/logger';
 import { resolveDriveAccess } from '@/lib/workspace-drive-server';
 
-type RouteParams = { params: Promise<{ id: string; linkId: string }> };
+type RouteParams = { params: Promise<{ workspaceId: string; linkId: string }> };
 
 // DELETE /api/workspaces/[id]/drive/links/[linkId]
 // Revokes rather than deletes: the files the link brought in keep their
@@ -15,7 +15,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const { id, linkId } = await params;
+    const { workspaceId: id, linkId } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
     if (!access.isAdmin) return apiErrors.forbidden('Only workspace admins revoke grab links');

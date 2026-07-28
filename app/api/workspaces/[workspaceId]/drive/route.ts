@@ -6,7 +6,7 @@ import { logError } from '@/lib/logger';
 import { driveFileDTO } from '@/lib/workspace-drive';
 import { resolveDriveAccess } from '@/lib/workspace-drive-server';
 
-type RouteParams = { params: Promise<{ id: string }> };
+type RouteParams = { params: Promise<{ workspaceId: string }> };
 
 // GET /api/workspaces/[id]/drive — everything waiting to be sorted onto items.
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'asset-list');
     if (limited) return limited;
 
-    const { id } = await params;
+    const { workspaceId: id } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
 

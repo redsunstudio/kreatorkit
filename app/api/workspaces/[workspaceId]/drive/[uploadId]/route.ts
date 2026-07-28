@@ -6,7 +6,7 @@ import { logError } from '@/lib/logger';
 import { createPresignedFileGetUrl, deleteR2Object } from '@/lib/r2';
 import { resolveDriveAccess } from '@/lib/workspace-drive-server';
 
-type RouteParams = { params: Promise<{ id: string; uploadId: string }> };
+type RouteParams = { params: Promise<{ workspaceId: string; uploadId: string }> };
 
 // GET /api/workspaces/[id]/drive/[uploadId] — 302 to a presigned download.
 // Never pipe the bytes through the app: raw footage is multi-GB and proxying it
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'asset-download');
     if (limited) return limited;
 
-    const { id, uploadId } = await params;
+    const { workspaceId: id, uploadId } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
 
@@ -42,7 +42,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const { id, uploadId } = await params;
+    const { workspaceId: id, uploadId } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
 

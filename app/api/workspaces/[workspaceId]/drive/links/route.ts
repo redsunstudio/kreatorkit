@@ -10,7 +10,7 @@ import {
 } from '@/lib/workspace-drive';
 import { resolveDriveAccess } from '@/lib/workspace-drive-server';
 
-type RouteParams = { params: Promise<{ id: string }> };
+type RouteParams = { params: Promise<{ workspaceId: string }> };
 
 /**
  * Same precedence the share-link route uses: the operator-configured app URL
@@ -56,7 +56,7 @@ function linkDTO(
 // GET /api/workspaces/[id]/drive/links
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await params;
+    const { workspaceId: id } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
     if (!access.isAdmin) return apiErrors.forbidden('Only workspace admins manage grab links');
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const { id } = await params;
+    const { workspaceId: id } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
     if (!access.isAdmin) return apiErrors.forbidden('Only workspace admins mint grab links');

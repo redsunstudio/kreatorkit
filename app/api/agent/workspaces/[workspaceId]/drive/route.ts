@@ -11,7 +11,7 @@ import {
   newUploadToken,
 } from '@/lib/workspace-drive';
 
-type RouteParams = { params: Promise<{ id: string }> };
+type RouteParams = { params: Promise<{ workspaceId: string }> };
 
 function baseUrl(request: NextRequest): string {
   for (const configured of [process.env.NEXT_PUBLIC_APP_URL, process.env.NEXTAUTH_URL]) {
@@ -30,7 +30,7 @@ function baseUrl(request: NextRequest): string {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     if (!isAgentRequest(request)) return apiErrors.unauthorized();
-    const { id } = await params;
+    const { workspaceId: id } = await params;
 
     const workspace = await db.workspace.findUnique({ where: { id }, select: { id: true } });
     if (!workspace) return apiErrors.notFound('Workspace');
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     if (!isAgentRequest(request)) return apiErrors.unauthorized();
-    const { id } = await params;
+    const { workspaceId: id } = await params;
 
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object') return apiErrors.badRequest('Invalid body');

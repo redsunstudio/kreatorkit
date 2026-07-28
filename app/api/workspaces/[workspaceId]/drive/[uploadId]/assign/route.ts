@@ -6,7 +6,7 @@ import { logError } from '@/lib/logger';
 import { assignDriveFileToVideo } from '@/lib/drive-assign';
 import { resolveDriveAccess } from '@/lib/workspace-drive-server';
 
-type RouteParams = { params: Promise<{ id: string; uploadId: string }> };
+type RouteParams = { params: Promise<{ workspaceId: string; uploadId: string }> };
 
 // POST /api/workspaces/[id]/drive/[uploadId]/assign  { videoId }
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const { id, uploadId } = await params;
+    const { workspaceId: id, uploadId } = await params;
     const access = await resolveDriveAccess(id);
     if (!access) return apiErrors.forbidden('Access denied');
 
