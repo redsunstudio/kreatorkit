@@ -146,6 +146,19 @@ export type BunnyPlaybackState = 'none' | 'processing' | 'error';
 export type BunnyDownloadPreference = 'original' | 'compressed';
 export type DownloadTarget = BunnyDownloadPreference | 'direct';
 
+/**
+ * A review marker: the team's orange signpost on the timeline saying "client,
+ * look here" (a graphic, a quote card, a rough take). Not feedback — the client
+ * answers one with a comment.
+ */
+export interface ReviewMarker {
+  id: string;
+  timestamp: number;
+  label: string;
+  createdByName: string | null;
+  createdAt: string;
+}
+
 export interface CommentMarker {
   id: string;
   timestamp: number;

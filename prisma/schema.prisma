@@ -489,7 +489,8 @@ model VideoVersion {
   comments        Comment[]
   watchProgress   WatchProgress[]
   approvalRequests ApprovalRequest[]
-  
+  markers         VideoMarker[]
+
   @@unique([videoParentId, versionNumber])
   @@index([videoParentId])
   @@index([videoParentId, isActive])
@@ -522,6 +523,35 @@ model VideoAsset {
   @@index([providerVideoId])
   @@index([videoId, createdAt(sort: Desc)])
   @@map("video_assets")
+}
+
+/// Review markers: orange signposts dropped on a cut's timeline BEFORE the client
+/// watches — "eyeball this graphic", "rough take here". Deliberately not comments:
+/// they carry no thread, no resolve state and no feedback, they just point.
+/// Planted by the team in the player or by an agent via /api/agent/videos/{id}/markers.
+model VideoMarker {
+  id        String @id @default(cuid())
+
+  /// Seconds into the cut.
+  timestamp Float
+  /// Short note shown on hover and in the review-points list.
+  label     String @db.Text
+
+  /// Which cut this marker belongs to — timecodes do not survive a re-edit, so
+  /// markers are per-version and die with it.
+  versionId String
+  version   VideoVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  /// Author. Kept as loose scalars (no User relation) so an agent-planted marker
+  /// and a guest-planted one store the same way and deleting a user can't cascade.
+  createdById   String?
+  createdByName String?
+
+  createdAt DateTime @default(now())
+
+  @@index([versionId])
+  @@index([versionId, timestamp])
+  @@map("video_markers")
 }
 
 model Comment {

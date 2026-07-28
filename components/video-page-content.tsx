@@ -28,6 +28,8 @@ import { CommentsPane } from '@/components/video-page/comments-pane';
 import { AssetsPane } from '@/components/video-page/assets-pane';
 import { ApprovalRequestDialog } from '@/components/video-page/approval-request-dialog';
 import { ApprovalRequestsPanel } from '@/components/video-page/approval-requests-panel';
+import { useReviewMarkers } from '@/components/video-page/hooks/use-review-markers';
+import { ReviewMarkersStrip } from '@/components/video-page/review-markers-strip';
 import type {
   CommentMarker,
   PlayerAdapter,
@@ -545,6 +547,30 @@ export function VideoPageContent({
     }));
   }, [filteredComments]);
 
+  // Review markers: the team's orange signposts on this cut. Only a signed-in
+  // member can plant one — a share-link guest is the audience for them.
+  const canManageReviewMarkers = !!currentUserId && !isGuest;
+  const {
+    markers: reviewMarkers,
+    saving: savingReviewMarker,
+    addMarker: addReviewMarker,
+    deleteMarker: deleteReviewMarker,
+  } = useReviewMarkers({ activeVersionId, canManage: canManageReviewMarkers });
+  const [markerDialogOpen, setMarkerDialogOpen] = useState(false);
+  const [markerDialogTime, setMarkerDialogTime] = useState<number | null>(null);
+
+  const handleOpenMarkerDialog = useCallback(() => {
+    setMarkerDialogTime(currentTime);
+    setMarkerDialogOpen(true);
+  }, [currentTime]);
+
+  const handleSeekToMarker = useCallback(
+    (timestamp: number) => {
+      handleSeekToTimestamp(timestamp, null, { pauseAfterSeek: true });
+    },
+    [handleSeekToTimestamp]
+  );
+
   const editAnnotationInitialStrokes = useMemo<AnnotationStroke[] | undefined>(() => {
     if (editAnnotationData) {
       try {
@@ -897,6 +923,23 @@ export function VideoPageContent({
             handleTimelineMouseMove={handleTimelineMouseMove}
             handleSeekToTimestamp={handleSeekToTimestamp}
             commentMarkers={commentMarkers}
+            reviewMarkers={reviewMarkers}
+            canAddReviewMarker={canManageReviewMarkers}
+            onAddReviewMarker={handleOpenMarkerDialog}
+          />
+
+          <ReviewMarkersStrip
+            markers={reviewMarkers}
+            canManage={canManageReviewMarkers}
+            saving={savingReviewMarker}
+            pendingTimestamp={markerDialogTime}
+            dialogOpen={markerDialogOpen}
+            setDialogOpen={setMarkerDialogOpen}
+            hideList={isFullscreenMode}
+            formatTime={formatTime}
+            onSeek={handleSeekToMarker}
+            onAdd={addReviewMarker}
+            onDelete={deleteReviewMarker}
           />
         </div>
 

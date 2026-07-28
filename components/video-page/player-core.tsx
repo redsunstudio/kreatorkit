@@ -4,6 +4,7 @@ import { memo, type RefObject } from 'react';
 import {
   AlertCircle,
   Clock,
+  Flag,
   Gauge,
   Maximize,
   MessageSquare,
@@ -31,7 +32,11 @@ import {
   type AnnotationCanvasHandle,
   type AnnotationStroke,
 } from '@/components/annotation-canvas';
-import type { BunnyQualityOption, CommentMarker } from '@/components/video-page/types';
+import type {
+  BunnyQualityOption,
+  CommentMarker,
+  ReviewMarker,
+} from '@/components/video-page/types';
 
 interface PlayerCoreProps {
   activeVersionId: string | null;
@@ -95,6 +100,9 @@ interface PlayerCoreProps {
     options?: { pauseAfterSeek?: boolean; timestampEnd?: number | null }
   ) => void;
   commentMarkers: CommentMarker[];
+  reviewMarkers: ReviewMarker[];
+  canAddReviewMarker: boolean;
+  onAddReviewMarker: () => void;
 }
 
 export const PlayerCore = memo(function PlayerCore({
@@ -155,6 +163,9 @@ export const PlayerCore = memo(function PlayerCore({
   handleTimelineMouseMove,
   handleSeekToTimestamp,
   commentMarkers,
+  reviewMarkers,
+  canAddReviewMarker,
+  onAddReviewMarker,
 }: PlayerCoreProps) {
   return (
     <>
@@ -453,6 +464,19 @@ export const PlayerCore = memo(function PlayerCore({
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {canAddReviewMarker && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 text-xs text-orange-400 hover:text-orange-300"
+                onClick={onAddReviewMarker}
+                title="Flag this moment for the client to review"
+              >
+                <Flag className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Mark</span>
+              </Button>
+            )}
+
             <Button
               variant="ghost"
               size="icon"
@@ -515,6 +539,30 @@ export const PlayerCore = memo(function PlayerCore({
             className="absolute top-0 h-full w-1 bg-primary rounded pointer-events-none"
             style={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 2px)` }}
           />
+
+          {/* Review markers sit ABOVE the comment dots and read as flags, not dots —
+              they are the team pointing, not the client responding. */}
+          {reviewMarkers.map((marker) => {
+            const percent = duration > 0 ? (marker.timestamp / duration) * 100 : 0;
+            return (
+              <button
+                key={marker.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSeekToTimestamp(marker.timestamp, null, { pauseAfterSeek: true });
+                }}
+                className="absolute top-0 z-20 h-full w-3 -translate-x-1/2 group/marker"
+                style={{ left: `${percent}%` }}
+                title={`${formatTime(marker.timestamp)} — ${marker.label}${
+                  marker.createdByName ? ` (${marker.createdByName})` : ''
+                }`}
+                aria-label={`Review point at ${formatTime(marker.timestamp)}: ${marker.label}`}
+              >
+                <span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-orange-500/80 group-hover/marker:bg-orange-400" />
+                <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-sm bg-orange-500 group-hover/marker:bg-orange-400" />
+              </button>
+            );
+          })}
 
           {commentMarkers.map((comment) => {
             const startPercent = duration > 0 ? (comment.timestamp / duration) * 100 : 0;
