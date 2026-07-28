@@ -16,6 +16,8 @@ function shape(v: {
   brief: string | null;
   description: string | null;
   thumbnailUrl: string | null;
+  packagingConfirmedAt: Date | null;
+  membersOnly: boolean;
   updatedAt: Date;
   projectId: string;
   project: { workspaceId: string; workspace: { name: string; slug: string } };
@@ -30,6 +32,8 @@ function shape(v: {
     brief: v.brief,
     description: v.description,
     thumbnailUrl: v.thumbnailUrl,
+    packagingDone: !!v.packagingConfirmedAt,
+    membersOnly: v.membersOnly,
     updatedAt: v.updatedAt.toISOString(),
     projectId: v.projectId,
     workspaceId: v.project.workspaceId,

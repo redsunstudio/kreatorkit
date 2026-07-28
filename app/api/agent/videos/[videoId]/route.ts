@@ -82,6 +82,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         publishedUrl: video.publishedUrl,
         publishStats: video.publishStats,
         thumbnailUrl: video.thumbnailUrl ? `${base}${video.thumbnailUrl}` : null,
+        // Packaging gate state — automations need to see WHY a status move was
+        // refused without guessing from the error string.
+        packagingConfirmedAt: video.packagingConfirmedAt?.toISOString() ?? null,
+        packagingConfirmedName: video.packagingConfirmedName,
+        membersOnly: video.membersOnly,
         projectId: video.project.id,
         workspaceId: video.project.workspaceId,
         shareUrl: shareToken ? `${base}/watch/${video.id}?shareToken=${shareToken}` : null,
