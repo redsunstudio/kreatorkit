@@ -116,6 +116,8 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     commentCount: v.versions[0]?._count.comments ?? 0,
     projectId: v.projectId,
     latestCutAt: latestCutAtByVideo.get(v.id) ?? null,
+    packagingDone: !!v.packagingConfirmedAt,
+    membersOnly: v.membersOnly,
     thumbnailUrl: v.thumbnailUrl
       ? v.thumbnailUrl.includes('?')
         ? v.thumbnailUrl

@@ -445,6 +445,22 @@ model Video {
   // Storage housekeeping: when old cut files/assets were cleared (status unchanged)
   storageClearedAt DateTime?
 
+  // PACKAGING GATE (John, 2026-07-28): title + thumbnail + description are decided
+  // BEFORE the edit starts, not bolted on at the end. Stamped once a team member
+  // confirms all three are final; the stamp is what the EDITING and APPROVED gates
+  // check. A title always exists (it is required at create), so presence alone
+  // proves nothing — the explicit confirmation is the signal that it is the REAL
+  // title and not a working one.
+  packagingConfirmedAt   DateTime?
+  packagingConfirmedById String?
+  packagingConfirmedName String?
+
+  // YouTube "Members only" visibility cannot be set by ANY API (the Data API's
+  // privacyStatus is public/private/unlisted only, and Zernio silently accepts
+  // anything you send it). Flagging the item blocks the automated push so nobody
+  // ships a members video publicly by accident — publish private, flip in Studio.
+  membersOnly Boolean @default(false)
+
   // BETA post extras — { repostUrl?, disableLinkPreview?, firstComment? }
   postOptions Json?
 

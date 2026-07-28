@@ -2,6 +2,11 @@ import { NextRequest } from 'next/server';
 import { VideoStatus, VideoType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
+import {
+  packagingBlocksStatus,
+  packagingErrorMessage,
+  packagingState,
+} from '@/lib/video-packaging';
 import { isAgentRequest } from '@/lib/agent-auth';
 import { createPresignedFileGetUrl, createPresignedVideoGetUrl } from '@/lib/r2';
 import { collectVideoMediaUrls, deleteMediaFilesBestEffort } from '@/lib/r2-cleanup';
@@ -118,9 +123,48 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return apiErrors.badRequest('description must be a string');
     }
 
+    // Packaging gate — the agent rail obeys the same rule as the UI, so an
+    // automation cannot walk an item into edit or approval with no packaging.
+    // Pass force:true to override (used by migrations/backfills, not by flows).
+    if (typeof status === 'string' && body?.force !== true) {
+      const current = await db.video.findUnique({
+        where: { id: videoId },
+        select: {
+          status: true,
+          title: true,
+          description: true,
+          thumbnailUrl: true,
+          packagingConfirmedAt: true,
+        },
+      });
+      if (!current) return apiErrors.notFound('Video');
+      if (current.status !== status) {
+        const state = packagingState({
+          title: typeof body?.title === 'string' ? body.title : current.title,
+          thumbnailUrl: body?.thumbnailUrl !== undefined ? body.thumbnailUrl : current.thumbnailUrl,
+          description: typeof description === 'string' ? description : current.description,
+          packagingConfirmedAt: current.packagingConfirmedAt,
+        });
+        if (packagingBlocksStatus(status, state)) {
+          return apiErrors.badRequest(packagingErrorMessage(state, status));
+        }
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;
     if (videoType !== undefined) updateData.videoType = videoType;
+    if (body?.membersOnly !== undefined) {
+      if (typeof body.membersOnly !== 'boolean') {
+        return apiErrors.badRequest('membersOnly must be a boolean');
+      }
+      updateData.membersOnly = body.membersOnly;
+    }
+    if (body?.packagingConfirmed === false) {
+      updateData.packagingConfirmedAt = null;
+      updateData.packagingConfirmedById = null;
+      updateData.packagingConfirmedName = null;
+    }
     if (typeof body?.title === 'string' && body.title.trim()) {
       updateData.title = String(body.title).trim().slice(0, 200);
     }

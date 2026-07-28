@@ -140,6 +140,17 @@ export async function publishVideoToYouTube(
     );
   }
 
+  // Members-only cannot be set by any API: the YouTube Data API's privacyStatus
+  // is public/private/unlisted only, and Zernio stores whatever string you hand
+  // it without validating — so an automated push of a members video would look
+  // like it worked and land PUBLIC. Refuse, and say what to do instead.
+  if (video.membersOnly && mode !== 'draft') {
+    throw new PublishError(
+      'This item is flagged Members only, which no API can set — upload it privately and switch ' +
+        'the visibility to Members only in YouTube Studio. Unflag the item to push it normally.'
+    );
+  }
+
   const checks = publishChecks(video);
   if (!checks.cut)
     throw new PublishError('No uploaded cut to publish — upload the final cut first');

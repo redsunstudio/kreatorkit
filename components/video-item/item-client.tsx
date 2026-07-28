@@ -43,6 +43,7 @@ import {
   formatCutDateFull,
 } from '@/components/pipeline-board';
 import { ThumbnailImage } from '@/components/thumbnail-image';
+import { collectNoteLinks, missingFromDescription, packagingState } from '@/lib/video-packaging';
 import { VIDEO_TYPES, typeMeta, isImageAsset, typeOptionLabel } from '@/lib/video-type';
 import {
   MULTIPART_PART_BYTES,
@@ -76,6 +77,9 @@ interface ItemVideo {
   thumbnailUrl: string | null;
   postOptions?: PostOptions | null;
   storageClearedAt?: string | null;
+  packagingConfirmedAt?: string | null;
+  packagingConfirmedName?: string | null;
+  membersOnly?: boolean;
   versions: ItemVersion[];
 }
 
@@ -157,6 +161,10 @@ export function VideoItemClient({
     { id: string; body: string; createdAt: string; author?: { name: string | null } | null }[]
   >([]);
   const [noteDraft, setNoteDraft] = useState('');
+  const [packagedAt, setPackagedAt] = useState<string | null>(video.packagingConfirmedAt ?? null);
+  const [packagedBy, setPackagedBy] = useState<string | null>(video.packagingConfirmedName ?? null);
+  const [membersOnly, setMembersOnly] = useState(!!video.membersOnly);
+  const [confirmingPackaging, setConfirmingPackaging] = useState(false);
   const [postingNote, setPostingNote] = useState(false);
   const [downloadingAll, setDownloadingAll] = useState<string | null>(null);
   const [postOpts, setPostOpts] = useState<PostOptions>(video.postOptions ?? {});
@@ -190,7 +198,7 @@ export function VideoItemClient({
 
   useEffect(() => {
     void loadAssets();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch-on-mount; setState runs after await, not synchronously
+
     void loadNotes();
   }, [loadAssets, loadNotes]);
 
@@ -205,6 +213,60 @@ export function VideoItemClient({
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [uploadsActive]);
+
+  // Packaging: title + thumbnail + description settled BEFORE the edit starts.
+  const packaging = packagingState({
+    title,
+    thumbnailUrl,
+    description,
+    packagingConfirmedAt: packagedAt,
+  });
+  // Links dropped in the notes / handoff belong in the description - surface the
+  // ones that have not made it across yet rather than making anyone scroll.
+  const pendingNoteLinks = missingFromDescription(collectNoteLinks(notes), description);
+
+  async function confirmPackaging(next: boolean) {
+    setConfirmingPackaging(true);
+    try {
+      await patchItem({ packagingConfirmed: next });
+      if (next) {
+        setPackagedAt(new Date().toISOString());
+        setPackagedBy('you');
+        toast.success('Packaging signed off');
+      } else {
+        setPackagedAt(null);
+        setPackagedBy(null);
+      }
+    } catch {
+      toast.error('Could not update the packaging sign-off');
+    } finally {
+      setConfirmingPackaging(false);
+    }
+  }
+
+  async function toggleMembersOnly(next: boolean) {
+    setMembersOnly(next);
+    try {
+      await patchItem({ membersOnly: next });
+    } catch {
+      setMembersOnly(!next);
+      toast.error('Could not update the members-only flag');
+    }
+  }
+
+  function addNoteLinksToDescription() {
+    const block = pendingNoteLinks.join('\n');
+    const next = description.trim() ? description.trim() + '\n\n' + block : block;
+    setDescription(next);
+    void persistDescription(next);
+    toast.success(
+      'Added ' +
+        pendingNoteLinks.length +
+        ' link' +
+        (pendingNoteLinks.length === 1 ? '' : 's') +
+        ' to the description'
+    );
+  }
 
   async function patchItem(payload: Record<string, unknown>) {
     const r = await fetch(`/api/projects/${video.projectId}/videos/${video.id}`, {
@@ -863,6 +925,102 @@ export function VideoItemClient({
           </p>
         </div>
       </div>
+
+      {/* Packaging gate - the front of the process, not the end of it. */}
+      {!isPost && (
+        <div
+          className={
+            'rounded-xl border px-4 py-3 ' +
+            (packaging.confirmed
+              ? 'border-green-700/40 bg-green-500/[0.04]'
+              : 'border-orange-500/40 bg-orange-500/[0.04]')
+          }
+        >
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-sm font-semibold">
+              {packaging.confirmed ? 'Packaging done' : 'Packaging'}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {packaging.confirmed
+                ? 'Signed off' +
+                  (packagedBy ? ' by ' + packagedBy : '') +
+                  ' - the team reviews the title, thumbnail and description alongside the cut.'
+                : 'Settle these before the edit starts, so nothing gets approved with the packaging undone.'}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              {!packaging.confirmed && canEdit && (
+                <Button
+                  size="sm"
+                  disabled={!packaging.ready || confirmingPackaging}
+                  onClick={() => void confirmPackaging(true)}
+                  title={
+                    packaging.ready
+                      ? 'Confirm the title, thumbnail and description are final'
+                      : 'Still missing: ' + packaging.missing.join(', ')
+                  }
+                >
+                  {confirmingPackaging ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+                  Mark packaging done
+                </Button>
+              )}
+              {packaging.confirmed && canEdit && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={confirmingPackaging}
+                  onClick={() => void confirmPackaging(false)}
+                >
+                  Reopen
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+            {(
+              [
+                ['Title', packaging.hasTitle],
+                ['Thumbnail', packaging.hasThumbnail],
+                ['Description', packaging.hasDescription],
+              ] as [string, boolean][]
+            ).map(([label, ok]) => (
+              <span key={label} className={ok ? 'text-green-400' : 'text-orange-300 font-medium'}>
+                {ok ? 'OK' : 'TODO'} {label}
+              </span>
+            ))}
+          </div>
+
+          {pendingNoteLinks.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
+              <span className="text-xs text-muted-foreground">
+                {pendingNoteLinks.length} link{pendingNoteLinks.length === 1 ? '' : 's'} in the
+                notes {pendingNoteLinks.length === 1 ? 'is' : 'are'} not in the description yet
+              </span>
+              {canEdit && (
+                <Button size="sm" variant="outline" onClick={addNoteLinksToDescription}>
+                  Add to description
+                </Button>
+              )}
+            </div>
+          )}
+
+          {canEdit && (
+            <label className="mt-3 flex items-center gap-2 border-t pt-2.5 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={membersOnly}
+                onChange={(e) => void toggleMembersOnly(e.target.checked)}
+                className="h-3.5 w-3.5 accent-orange-500"
+              />
+              <span>
+                <span className="font-medium text-foreground">Members only</span> - no API can set
+                this on YouTube, so flagging it blocks the automated push. Upload privately and
+                switch the visibility in Studio.
+              </span>
+            </label>
+          )}
+        </div>
+      )}
 
       {/* Actions row */}
       <div className="flex flex-wrap items-center gap-2">

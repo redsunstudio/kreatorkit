@@ -11,6 +11,11 @@ import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response
 import { logError } from '@/lib/logger';
 import { canDownloadProjectMedia } from '@/lib/project-download';
 import { notifyReviewReady } from '@/lib/review-notify';
+import {
+  packagingBlocksStatus,
+  packagingErrorMessage,
+  packagingState,
+} from '@/lib/video-packaging';
 
 function bigintSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
@@ -182,8 +187,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { title, description, position, status, brief, thumbnailUrl, videoType, postOptions } =
-      body;
+    const {
+      title,
+      description,
+      position,
+      status,
+      brief,
+      thumbnailUrl,
+      videoType,
+      postOptions,
+      packagingConfirmed,
+      membersOnly,
+      force,
+    } = body;
 
     // Validate types before using string methods to prevent type confusion attacks
     if (
@@ -240,6 +256,57 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           clean.firstComment = String(postOptions.firstComment).trim().slice(0, 1250);
         }
         updateData.postOptions = Object.keys(clean).length > 0 ? clean : Prisma.DbNull;
+      }
+    }
+
+    // Packaging gate. Deliberately applied to EXPLICIT moves only — the auto-flips
+    // that happen when footage or a cut is uploaded must never be refused, since
+    // blocking an upload is the wrong way to argue about a thumbnail.
+    if (typeof status === 'string' && status !== video.status && force !== true) {
+      const state = packagingState({
+        title: typeof title === 'string' ? title : video.title,
+        thumbnailUrl: thumbnailUrl !== undefined ? thumbnailUrl : video.thumbnailUrl,
+        description: typeof description === 'string' ? description : video.description,
+        packagingConfirmedAt: video.packagingConfirmedAt,
+      });
+      if (packagingBlocksStatus(status, state)) {
+        return apiErrors.badRequest(packagingErrorMessage(state, status));
+      }
+    }
+
+    if (membersOnly !== undefined) {
+      if (typeof membersOnly !== 'boolean') {
+        return apiErrors.badRequest('membersOnly must be a boolean');
+      }
+      updateData.membersOnly = membersOnly;
+    }
+
+    if (packagingConfirmed !== undefined) {
+      if (typeof packagingConfirmed !== 'boolean') {
+        return apiErrors.badRequest('packagingConfirmed must be a boolean');
+      }
+      if (packagingConfirmed) {
+        // Confirm against the values as they will be AFTER this write, so the
+        // "set the description and sign it off" round trip works in one call.
+        const state = packagingState({
+          title: typeof title === 'string' ? title : video.title,
+          thumbnailUrl: thumbnailUrl !== undefined ? thumbnailUrl : video.thumbnailUrl,
+          description: typeof description === 'string' ? description : video.description,
+          packagingConfirmedAt: new Date(),
+        });
+        if (!state.ready) {
+          return apiErrors.badRequest(
+            `Packaging is not complete — still missing: ${state.missing.join(', ')}`
+          );
+        }
+        updateData.packagingConfirmedAt = new Date();
+        updateData.packagingConfirmedById = session.user.id;
+        updateData.packagingConfirmedName =
+          session.user.name || session.user.email || 'a workspace member';
+      } else {
+        updateData.packagingConfirmedAt = null;
+        updateData.packagingConfirmedById = null;
+        updateData.packagingConfirmedName = null;
       }
     }
 

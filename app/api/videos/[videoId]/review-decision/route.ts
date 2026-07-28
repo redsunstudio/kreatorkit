@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { auth, computeProjectAccess, projectAccessInclude } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
+import { packagingErrorMessage, packagingState } from '@/lib/video-packaging';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateShareLinkAccess } from '@/lib/share-links';
 import { getShareSessionFromRequest } from '@/lib/share-session';
@@ -64,6 +65,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const rawName = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
     const actorName = session?.user?.name || session?.user?.email || rawName || 'A reviewer';
+
+    // Approving from the review page runs the same packaging back stop as the
+    // item page. "Send back to editor" is never blocked — that direction is how
+    // you FIX an item, so refusing it would trap the thing you want to unstick.
+    if (decision === 'approve') {
+      const packaging = packagingState(video);
+      if (!packaging.confirmed) {
+        return apiErrors.badRequest(packagingErrorMessage(packaging, 'APPROVED'));
+      }
+    }
 
     const nextStatus = decision === 'approve' ? 'APPROVED' : 'EDITING';
     await db.video.update({ where: { id: videoId }, data: { status: nextStatus } });

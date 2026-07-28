@@ -12,8 +12,10 @@ import {
   List,
   Loader2,
   MessageSquare,
+  PackageOpen,
   Play,
   Plus,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -105,6 +107,9 @@ interface PipelineVideo {
   itemThumbnailUrl?: string | null;
   /** ISO date the newest cut was uploaded — null on idea items with no cut yet. */
   latestCutAt?: string | null;
+  /** Title + thumbnail + description signed off. Gates EDITING and APPROVED. */
+  packagingDone?: boolean;
+  membersOnly?: boolean;
 }
 
 // Fixed locale + UTC so the server render and the client render agree (a
@@ -391,6 +396,24 @@ export function PipelineBoard({
             </>
           )}
         </span>
+        {v.packagingDone === false && stageOf(v.status) !== 'IDEA' && (
+          <span
+            className="text-xs inline-flex items-center gap-1 font-mono text-orange-300"
+            title="Title, thumbnail and description are not signed off - this cannot be approved"
+          >
+            <PackageOpen className="h-3 w-3" />
+            pkg
+          </span>
+        )}
+        {v.membersOnly && (
+          <span
+            className="text-xs inline-flex items-center gap-1 font-mono text-muted-foreground"
+            title="Members only - publish privately, then switch visibility in YouTube Studio"
+          >
+            <Users className="h-3 w-3" />
+            members
+          </span>
+        )}
         {v.commentCount > 0 && (
           <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono">
             <MessageSquare className="h-3 w-3" />

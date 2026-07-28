@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
 import { logError } from '@/lib/logger';
+import { packagingErrorMessage, packagingState } from '@/lib/video-packaging';
 
 interface RouteParams {
   params: Promise<{ videoId: string }>;
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       select: {
         id: true,
         status: true,
+        title: true,
+        description: true,
+        thumbnailUrl: true,
+        packagingConfirmedAt: true,
         project: { select: { workspace: { select: { id: true, ownerId: true } } } },
       },
     });
@@ -35,6 +40,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return apiErrors.badRequest('Archived items cannot be approved');
     if (video.status === 'APPROVED' || video.status === 'PUBLISHED') {
       return withCacheControl(successResponse({ status: video.status }), 'private, no-store');
+    }
+
+    // The back stop for John's rule: never approve an edit with the packaging
+    // still undone. The front gate is the move into EDITING; this catches
+    // anything that slipped past it.
+    const packaging = packagingState(video);
+    if (!packaging.confirmed) {
+      return apiErrors.badRequest(packagingErrorMessage(packaging, 'APPROVED'));
     }
 
     await db.video.update({ where: { id: videoId }, data: { status: 'APPROVED' } });
