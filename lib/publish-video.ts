@@ -118,6 +118,17 @@ export async function publishVideoToYouTube(
   });
   if (!video) throw new PublishError('Video not found', 404);
 
+  // Members-only cannot be set by any API: the YouTube Data API's privacyStatus
+  // is public/private/unlisted only, and Zernio stores whatever string you hand
+  // it without validating — so an automated push of a members video would look
+  // like it worked and land PUBLIC. Refuse, and say what to do instead.
+  if (video.membersOnly && mode !== 'draft') {
+    throw new PublishError(
+      'This item is flagged Members only, which no API can set — upload it privately and switch ' +
+        'the visibility to Members only in YouTube Studio. Unflag the item to push it normally.'
+    );
+  }
+
   const cfg = workspaceZernioConfig(video.project.workspace.publishing);
   const apiKey = cfg.apiKey;
   if (!apiKey) {
@@ -137,17 +148,6 @@ export async function publishVideoToYouTube(
   if (video.zernioPostId && mode !== 'draft' && !opts.force) {
     throw new PublishError(
       `This video already went to Zernio (post ${video.zernioPostId}) — it may be live or in the client's Studio. Pass force:true only if you really want a second push.`
-    );
-  }
-
-  // Members-only cannot be set by any API: the YouTube Data API's privacyStatus
-  // is public/private/unlisted only, and Zernio stores whatever string you hand
-  // it without validating — so an automated push of a members video would look
-  // like it worked and land PUBLIC. Refuse, and say what to do instead.
-  if (video.membersOnly && mode !== 'draft') {
-    throw new PublishError(
-      'This item is flagged Members only, which no API can set — upload it privately and switch ' +
-        'the visibility to Members only in YouTube Studio. Unflag the item to push it normally.'
     );
   }
 
