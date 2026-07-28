@@ -58,6 +58,12 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
   'asset-bunny-init': { windowMs: 60 * 1000, maxRequests: 10 }, // 10 per minute
   'asset-r2-init': { windowMs: 60 * 1000, maxRequests: 10 }, // 10 per minute
 
+  // Workspace Drive grab link — public and unauthenticated, so tighter than the
+  // signed-in asset rails, but loose enough for a client dropping a shoot folder.
+  'drive-link-read': { windowMs: 60 * 1000, maxRequests: 30 }, // 30 per minute
+  'drive-upload-init': { windowMs: 60 * 1000, maxRequests: 20 }, // 20 files per minute
+  'drive-upload-complete': { windowMs: 60 * 1000, maxRequests: 20 }, // 20 per minute
+
   // Search — debounced on client but protect against scripted callers
   search: { windowMs: 60 * 1000, maxRequests: 60 }, // 60 per minute
 

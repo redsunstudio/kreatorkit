@@ -14,6 +14,7 @@ export const KREATORKIT_MODULES = [
   'assets',
   'reports',
   'strategy', // channel strategy tab (pillars, recurring ideas, notes)
+  'drive', // workspace Drive + content grab links (client uploads with no account)
   'posts', // BETA: written social post items (LinkedIn) — no nav tab, gates the 📝 type
 ] as const;
 export type KreatorKitModule = (typeof KREATORKIT_MODULES)[number];
@@ -25,6 +26,7 @@ const MODULE_DEFAULTS: Record<KreatorKitModule, boolean> = {
   assets: true,
   reports: false,
   strategy: false,
+  drive: false,
   posts: false,
 };
 

@@ -1,5 +1,13 @@
 import Link from 'next/link';
-import { MonitorPlay, Inbox, Palette, BarChart3, Youtube, Compass } from 'lucide-react';
+import {
+  MonitorPlay,
+  Inbox,
+  Palette,
+  BarChart3,
+  Youtube,
+  Compass,
+  FolderInput,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { hasModule, KREATORKIT_MODULES, type KreatorKitModule } from '@/lib/workspace-features';
 
@@ -16,6 +24,7 @@ const MODULE_META: Partial<
   assets: { label: 'Brand assets', href: (id) => `/workspaces/${id}/assets`, icon: Palette },
   reports: { label: 'Reports', href: (id) => `/workspaces/${id}/reports`, icon: BarChart3 },
   strategy: { label: 'Strategy', href: (id) => `/workspaces/${id}/strategy`, icon: Compass },
+  drive: { label: 'Drive', href: (id) => `/workspaces/${id}/drive`, icon: FolderInput },
 };
 
 interface ModuleNavProps {

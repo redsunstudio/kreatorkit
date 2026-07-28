@@ -20,7 +20,7 @@ class QuotaExceededError extends Error {}
  * every upload.
  */
 export async function getUserTotalStorageBytes(userId: string): Promise<bigint> {
-  const [r2AssetRows, r2VideoRows, bunnyByUser, reservationRows] = await Promise.all([
+  const [r2AssetRows, r2VideoRows, bunnyByUser, reservationRows, driveRows] = await Promise.all([
     db.$queryRaw<[{ total: bigint }]>`
       SELECT COALESCE(SUM(size_bytes), 0)::bigint AS total
       FROM video_assets
@@ -43,14 +43,25 @@ export async function getUserTotalStorageBytes(userId: string): Promise<bigint> 
       WHERE "billedUserId" = ${userId}
         AND "expiresAt" > NOW()
     `,
+    // Workspace Drive: files dropped through a public grab link. These MUST be
+    // metered — the link is unauthenticated, so it is the one upload path a
+    // stranger can drive. (Once a drive file is assigned to an item it becomes an
+    // R2_FILE asset, which this total deliberately does not count a second time.)
+    db.$queryRaw<[{ total: bigint }]>`
+      SELECT COALESCE(SUM(wu.size_bytes), 0)::bigint AS total
+      FROM workspace_uploads wu
+      INNER JOIN workspaces w ON w.id = wu."workspaceId"
+      WHERE w."ownerId" = ${userId}
+    `,
   ]);
 
   const r2AssetBytes = r2AssetRows[0]?.total ?? BigInt(0);
   const r2VideoBytes = r2VideoRows[0]?.total ?? BigInt(0);
   const bunnyBytes = BigInt(bunnyByUser[userId] ?? 0);
   const reservedBytes = reservationRows[0]?.total ?? BigInt(0);
+  const driveBytes = driveRows[0]?.total ?? BigInt(0);
 
-  return r2AssetBytes + r2VideoBytes + bunnyBytes + reservedBytes;
+  return r2AssetBytes + r2VideoBytes + bunnyBytes + reservedBytes + driveBytes;
 }
 
 /**

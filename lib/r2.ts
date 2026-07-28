@@ -516,6 +516,27 @@ export async function createMultipartVideoUpload(
   return result.UploadId;
 }
 
+/**
+ * Multipart for the generic `files/` prefix — the workspace Drive collects raw
+ * footage through a public link and a single PUT stream to the bucket region
+ * measures ~5 Mbps on high-RTT connections. The part presign / complete / abort
+ * helpers below are prefix-agnostic, so only the create needs its own guard.
+ */
+export async function createMultipartFileUpload(key: string, contentType: string): Promise<string> {
+  if (!key.startsWith('files/')) {
+    throw new Error('Invalid file object key');
+  }
+  const result = await r2Client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      ContentType: contentType,
+    })
+  );
+  if (!result.UploadId) throw new Error('Multipart upload initiation failed');
+  return result.UploadId;
+}
+
 export async function presignVideoUploadPart(
   key: string,
   uploadId: string,
