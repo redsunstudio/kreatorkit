@@ -66,7 +66,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         downloadUrl:
           a.provider === 'R2_FILE' && a.sourceUrl?.startsWith('files/')
             ? await createPresignedFileGetUrl(a.sourceUrl, a.displayName).catch(() => null)
-            : `${base}/api/videos/${video.id}/assets/${a.id}/download`,
+            : `${base}/api/agent/videos/${video.id}/assets/${a.id}/download`,
       }))
     );
 
