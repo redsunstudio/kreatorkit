@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -112,28 +113,25 @@ export function WorkspacesClient({
                 />
                 {/* square cover art */}
                 <div className="relative aspect-square w-full rounded-[1rem] overflow-hidden border border-white/10 shadow-lg shadow-black/40">
-                  {workspace.coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={workspace.coverUrl}
-                      alt=""
-                      className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
-                    />
-                  ) : (
-                    <div
-                      className="w-full h-full flex items-center justify-center"
-                      style={{
-                        background: `radial-gradient(circle at 30% 20%, ${workspace.brandAccent || '#30363d'}33, #161b22 75%)`,
-                      }}
-                    >
-                      <span
-                        className="text-6xl font-bold opacity-80"
-                        style={{ color: workspace.brandAccent || '#7d8590' }}
+                  <ThumbnailImage
+                    src={workspace.coverUrl}
+                    className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+                    fallback={
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{
+                          background: `radial-gradient(circle at 30% 20%, ${workspace.brandAccent || '#30363d'}33, #161b22 75%)`,
+                        }}
                       >
-                        {workspace.name.slice(0, 1).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
+                        <span
+                          className="text-6xl font-bold opacity-80"
+                          style={{ color: workspace.brandAccent || '#7d8590' }}
+                        >
+                          {workspace.name.slice(0, 1).toUpperCase()}
+                        </span>
+                      </div>
+                    }
+                  />
                 </div>
                 {/* meta */}
                 <div className="relative mt-4 flex-1 flex flex-col">

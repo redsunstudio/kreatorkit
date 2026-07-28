@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { getPostReviewByToken, resolveReviewMedia } from '@/lib/post-review';
 import { PostReviewActions } from '@/components/post-review-actions';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,12 +78,15 @@ export default async function PostReviewPage({ params }: PageProps) {
             <div className={media.length === 1 ? '' : 'grid grid-cols-2 gap-0.5'}>
               {media.map((m) =>
                 m.kind === 'image' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <ThumbnailImage
                     key={m.assetId}
                     src={`/api/p/${token}/media/${m.assetId}`}
-                    alt=""
                     className="w-full object-cover max-h-[560px]"
+                    fallback={
+                      <div className="w-full aspect-video bg-neutral-100 flex items-center justify-center text-sm text-neutral-400">
+                        Image unavailable
+                      </div>
+                    }
                   />
                 ) : m.kind === 'video' ? (
                   <video

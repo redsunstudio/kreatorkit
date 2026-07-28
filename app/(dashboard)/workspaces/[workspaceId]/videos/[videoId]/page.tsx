@@ -22,7 +22,13 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
       project: { select: { id: true, workspaceId: true } },
       versions: {
         orderBy: { versionNumber: 'desc' },
-        select: { id: true, versionNumber: true, versionLabel: true, isActive: true },
+        select: {
+          id: true,
+          versionNumber: true,
+          versionLabel: true,
+          isActive: true,
+          createdAt: true,
+        },
       },
     },
   });
@@ -78,6 +84,7 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
             versionNumber: v.versionNumber,
             versionLabel: v.versionLabel,
             isActive: v.isActive,
+            createdAt: v.createdAt.toISOString(),
           })),
         }}
         canEdit={isAdmin || access.canEdit}

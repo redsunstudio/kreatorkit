@@ -11,6 +11,7 @@ import { hasModule } from '@/lib/workspace-features';
 import { PipelineBoard } from '@/components/pipeline-board';
 import { CoverButton } from '@/components/workspace/cover-button';
 import { TaskDrawer } from '@/components/workspace/task-drawer';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 
 interface WorkspacePageProps {
   params: Promise<{ workspaceId: string }>;
@@ -91,6 +92,20 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     (v) => v.status !== 'ARCHIVED' && v.status !== 'PUBLISHED'
   );
   const archivedCount = workspaceVideos.filter((v) => v.status === 'ARCHIVED').length;
+
+  // Newest cut per item — the active version is not always the latest upload, so
+  // this is a separate aggregate rather than a field on the included version.
+  const latestCutRows = activeVideos.length
+    ? await db.videoVersion.groupBy({
+        by: ['videoId'],
+        where: { videoId: { in: activeVideos.map((v) => v.id) } },
+        _max: { createdAt: true },
+      })
+    : [];
+  const latestCutAtByVideo = new Map(
+    latestCutRows.map((r) => [r.videoId, r._max.createdAt?.toISOString() ?? null])
+  );
+
   const pipelineItems = activeVideos.map((v) => ({
     id: v.id,
     title: v.title,
@@ -100,6 +115,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     currentVersion: v._count.versions,
     commentCount: v.versions[0]?._count.comments ?? 0,
     projectId: v.projectId,
+    latestCutAt: latestCutAtByVideo.get(v.id) ?? null,
     thumbnailUrl: v.thumbnailUrl
       ? v.thumbnailUrl.includes('?')
         ? v.thumbnailUrl
@@ -134,24 +150,21 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-4">
-          {workspace.coverKey ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={`/api/workspaces/${workspaceId}/cover`}
-              alt=""
-              className="h-16 w-16 rounded-2xl object-cover border border-white/10 shadow-lg shadow-black/40 flex-none"
-            />
-          ) : (
-            <div
-              className="h-16 w-16 rounded-2xl border border-white/10 flex items-center justify-center text-2xl font-bold flex-none"
-              style={{
-                background: `radial-gradient(circle at 30% 20%, ${workspace.brandAccent || '#30363d'}33, #161b22 75%)`,
-                color: workspace.brandAccent || '#7d8590',
-              }}
-            >
-              {workspace.name.slice(0, 1).toUpperCase()}
-            </div>
-          )}
+          <ThumbnailImage
+            src={workspace.coverKey ? `/api/workspaces/${workspaceId}/cover` : null}
+            className="h-16 w-16 rounded-2xl object-cover border border-white/10 shadow-lg shadow-black/40 flex-none"
+            fallback={
+              <div
+                className="h-16 w-16 rounded-2xl border border-white/10 flex items-center justify-center text-2xl font-bold flex-none"
+                style={{
+                  background: `radial-gradient(circle at 30% 20%, ${workspace.brandAccent || '#30363d'}33, #161b22 75%)`,
+                  color: workspace.brandAccent || '#7d8590',
+                }}
+              >
+                {workspace.name.slice(0, 1).toUpperCase()}
+              </div>
+            }
+          />
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{workspace.name}</h1>
             {workspace.description && (

@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, Film, MessageSquare } from 'lucide-react';
 import { auth, checkWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 
 interface ArchivePageProps {
   params: Promise<{ workspaceId: string }>;
@@ -77,18 +78,21 @@ export default async function WorkspaceArchivePage({ params }: ArchivePageProps)
               href={`/workspaces/${workspaceId}/videos/${v.id}`}
               className="flex items-center gap-4 px-4 py-2.5 hover:bg-white/[0.03] transition-colors"
             >
-              {v.thumbnailUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={v.thumbnailUrl.includes('?') ? v.thumbnailUrl : `${v.thumbnailUrl}?inline=1`}
-                  alt=""
-                  className="h-9 w-16 rounded-md object-cover border border-white/10 flex-none"
-                />
-              ) : (
-                <div className="h-9 w-16 rounded-md border border-white/10 bg-white/[0.04] flex items-center justify-center text-sm text-muted-foreground flex-none">
-                  🎬
-                </div>
-              )}
+              <ThumbnailImage
+                src={
+                  v.thumbnailUrl
+                    ? v.thumbnailUrl.includes('?')
+                      ? v.thumbnailUrl
+                      : `${v.thumbnailUrl}?inline=1`
+                    : null
+                }
+                className="h-9 w-16 rounded-md object-cover border border-white/10 flex-none"
+                fallback={
+                  <div className="h-9 w-16 rounded-md border border-white/10 bg-white/[0.04] flex items-center justify-center text-sm text-muted-foreground flex-none">
+                    🎬
+                  </div>
+                }
+              />
               <span className="text-sm font-medium truncate flex-1 min-w-0">{v.title}</span>
               {v.versions[0] && (
                 <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono flex-none">

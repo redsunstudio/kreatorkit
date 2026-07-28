@@ -103,6 +103,37 @@ interface PipelineVideo {
   projectId?: string;
   thumbnailUrl?: string | null;
   itemThumbnailUrl?: string | null;
+  /** ISO date the newest cut was uploaded — null on idea items with no cut yet. */
+  latestCutAt?: string | null;
+}
+
+// Fixed locale + UTC so the server render and the client render agree (a
+// locale-dependent or timezone-dependent string hydrates mismatched).
+const DAY_FMT = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+});
+const FULL_FMT = new Intl.DateTimeFormat('en-GB', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC',
+});
+
+/** "25 Jul", or "25 Jul 24" once the upload is in a previous calendar year. */
+export function formatCutDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const short = DAY_FMT.format(d);
+  const thisYear = new Date().getUTCFullYear();
+  return d.getUTCFullYear() === thisYear
+    ? short
+    : `${short} ${String(d.getUTCFullYear()).slice(2)}`;
+}
+
+export function formatCutDateFull(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${FULL_FMT.format(d)} UTC`;
 }
 
 interface PipelineBoardProps {
@@ -338,10 +369,20 @@ export function PipelineBoard({
         >
           {t.emoji} {typeOptionLabel(t)}
         </span>
-        <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono">
+        <span
+          className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono"
+          title={
+            v.currentVersion > 0 && v.latestCutAt
+              ? `Latest cut (v${v.currentVersion}) uploaded ${formatCutDateFull(v.latestCutAt)}`
+              : undefined
+          }
+        >
           {v.currentVersion > 0 ? (
             <>
               <Film className="h-3 w-3" />v{v.currentVersion}
+              {v.latestCutAt && (
+                <span className="text-muted-foreground/70">· {formatCutDate(v.latestCutAt)}</span>
+              )}
             </>
           ) : (
             <>

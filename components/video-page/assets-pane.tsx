@@ -43,6 +43,7 @@ import {
 import { useCommentMedia } from '@/components/video-page/hooks/use-comment-media';
 import { resolvePublicBunnyCdnHostname } from '@/lib/bunny-cdn';
 import { withThumbnailCacheBust } from '@/lib/thumbnail-url';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 import { cn } from '@/lib/utils';
 
 const MAX_AUDIO_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
@@ -999,12 +1000,12 @@ export const AssetsPane = memo(function AssetsPane({
       const imageSrc = asset.thumbnailUrl || asset.sourceUrl;
       return (
         <div className="h-24 w-36 rounded border bg-black/20 flex items-center justify-center overflow-hidden">
-          {imageSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageSrc} alt={asset.displayName} className="h-full w-full object-contain" />
-          ) : (
-            <ImageIcon className="h-6 w-6 text-muted-foreground" />
-          )}
+          <ThumbnailImage
+            src={imageSrc}
+            alt={asset.displayName}
+            className="h-full w-full object-contain"
+            fallback={<ImageIcon className="h-6 w-6 text-muted-foreground" />}
+          />
         </div>
       );
     }
@@ -1012,14 +1013,14 @@ export const AssetsPane = memo(function AssetsPane({
     if (asset.provider === 'YOUTUBE' && asset.providerVideoId) {
       return (
         <div className="h-24 w-36 rounded border overflow-hidden bg-black/70 flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <ThumbnailImage
             src={
               asset.thumbnailUrl ||
               `https://img.youtube.com/vi/${asset.providerVideoId}/mqdefault.jpg`
             }
             alt={asset.displayName}
             className="h-full w-full object-contain"
+            fallback={<FileVideo className="h-6 w-6 text-muted-foreground" />}
           />
         </div>
       );
@@ -1029,16 +1030,12 @@ export const AssetsPane = memo(function AssetsPane({
       const thumbnailSrc = asset.thumbnailUrl;
       return (
         <div className="h-24 w-36 rounded border overflow-hidden bg-black/70 relative flex items-center justify-center">
-          {thumbnailSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={thumbnailSrc}
-              alt={asset.displayName}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <FileVideo className="h-6 w-6 text-muted-foreground" />
-          )}
+          <ThumbnailImage
+            src={thumbnailSrc}
+            alt={asset.displayName}
+            className="h-full w-full object-cover"
+            fallback={<FileVideo className="h-6 w-6 text-muted-foreground" />}
+          />
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
             <Play className="h-4 w-4 text-white" />
           </div>

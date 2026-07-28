@@ -36,7 +36,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PIPELINE_STAGES, stageOf } from '@/components/pipeline-board';
+import {
+  PIPELINE_STAGES,
+  stageOf,
+  formatCutDate,
+  formatCutDateFull,
+} from '@/components/pipeline-board';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 import { VIDEO_TYPES, typeMeta, isImageAsset, typeOptionLabel } from '@/lib/video-type';
 import {
   MULTIPART_PART_BYTES,
@@ -49,6 +55,8 @@ interface ItemVersion {
   versionNumber: number;
   versionLabel: string | null;
   isActive: boolean;
+  /** ISO upload date — shown on the cut so the pipeline reads as a timeline. */
+  createdAt?: string | null;
 }
 
 interface PostOptions {
@@ -769,38 +777,44 @@ export function VideoItemClient({
               }}
             />
           )}
-          {thumbnailUrl ? (
-            <div className="relative group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={thumbnailUrl.includes('?') ? thumbnailUrl : `${thumbnailUrl}?inline=1`}
-                alt="Thumbnail"
-                className="rounded-xl border w-full aspect-video object-cover"
-              />
-              {canEdit && (
+          {/* A thumbnail that won't load falls back to the upload tile — never a
+              broken-image glyph, and the fallback is also the fix (re-upload). */}
+          <div className="relative group">
+            <ThumbnailImage
+              src={
+                thumbnailUrl
+                  ? thumbnailUrl.includes('?')
+                    ? thumbnailUrl
+                    : `${thumbnailUrl}?inline=1`
+                  : null
+              }
+              alt="Thumbnail"
+              className="rounded-xl border w-full aspect-video object-cover"
+              fallback={
                 <button
-                  className="absolute bottom-2 right-2 rounded-md bg-black/70 backdrop-blur px-2.5 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => thumbInput.current?.click()}
-                  disabled={uploadingThumb}
+                  className="rounded-xl border border-dashed w-full aspect-video flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-white/25 transition-colors"
+                  onClick={() => canEdit && thumbInput.current?.click()}
+                  disabled={!canEdit || uploadingThumb}
                 >
-                  {uploadingThumb ? 'Uploading…' : 'Replace'}
+                  {uploadingThumb ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  {canEdit ? 'Upload thumbnail' : 'No thumbnail yet'}
                 </button>
-              )}
-            </div>
-          ) : (
-            <button
-              className="rounded-xl border border-dashed w-full aspect-video flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-white/25 transition-colors"
-              onClick={() => canEdit && thumbInput.current?.click()}
-              disabled={!canEdit || uploadingThumb}
-            >
-              {uploadingThumb ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              {canEdit ? 'Upload thumbnail' : 'No thumbnail yet'}
-            </button>
-          )}
+              }
+            />
+            {thumbnailUrl && canEdit && (
+              <button
+                className="absolute bottom-2 right-2 rounded-md bg-black/70 backdrop-blur px-2.5 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => thumbInput.current?.click()}
+                disabled={uploadingThumb}
+              >
+                {uploadingThumb ? 'Uploading…' : 'Replace'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-2">
           {editingTitle ? (
@@ -989,7 +1003,13 @@ export function VideoItemClient({
                         v{latest.versionNumber}
                         {latest.versionLabel ? ` — ${latest.versionLabel}` : ''}
                       </span>
-                      <span className="text-xs text-muted-foreground shrink-0">latest cut</span>
+                      <span
+                        className="text-xs text-muted-foreground shrink-0"
+                        title={latest.createdAt ? formatCutDateFull(latest.createdAt) : undefined}
+                      >
+                        latest cut
+                        {latest.createdAt ? ` · ${formatCutDate(latest.createdAt)}` : ''}
+                      </span>
                       <Button asChild size="sm" className="ml-auto h-8 shrink-0">
                         <Link href={`/projects/${video.projectId}/videos/${video.id}`}>
                           <Play className="h-3.5 w-3.5 mr-1.5" />
@@ -998,11 +1018,32 @@ export function VideoItemClient({
                       </Button>
                     </div>
                     {video.versions.length > 1 && (
-                      <p className="text-xs text-muted-foreground">
-                        {video.versions.length - 1} earlier cut
-                        {video.versions.length > 2 ? 's' : ''} — switch or delete versions from the
-                        review page.
-                      </p>
+                      <div className="space-y-1">
+                        <ul className="text-xs text-muted-foreground space-y-0.5">
+                          {video.versions
+                            .filter((ver) => ver.id !== latest.id)
+                            .map((ver) => (
+                              <li
+                                key={ver.id}
+                                className="flex items-center gap-2 font-mono"
+                                title={ver.createdAt ? formatCutDateFull(ver.createdAt) : undefined}
+                              >
+                                <span className="shrink-0">v{ver.versionNumber}</span>
+                                {ver.createdAt && (
+                                  <span className="shrink-0 text-muted-foreground/70">
+                                    {formatCutDate(ver.createdAt)}
+                                  </span>
+                                )}
+                                {ver.versionLabel && (
+                                  <span className="truncate font-sans">{ver.versionLabel}</span>
+                                )}
+                              </li>
+                            ))}
+                        </ul>
+                        <p className="text-xs text-muted-foreground">
+                          Switch or delete cuts from the review page.
+                        </p>
+                      </div>
                     )}
                   </div>
                 );
@@ -1297,14 +1338,19 @@ export function VideoItemClient({
               {assets
                 .filter((a) => isImageAsset(a))
                 .map((a) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <ThumbnailImage
                     key={a.id}
                     src={`/api/videos/${video.id}/assets/${a.id}/download?inline=1`}
                     alt={a.displayName}
-                    title={a.displayName}
                     className="aspect-square w-full rounded-lg border object-cover"
-                    loading="lazy"
+                    fallback={
+                      <div
+                        title={a.displayName}
+                        className="aspect-square w-full rounded-lg border bg-white/[0.04] flex items-center justify-center text-lg text-muted-foreground"
+                      >
+                        🖼️
+                      </div>
+                    }
                   />
                 ))}
             </div>
@@ -1576,11 +1622,14 @@ export function VideoItemClient({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">Thumbnail</p>
                   {thumbnailUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <ThumbnailImage
                       src={thumbnailUrl.includes('?') ? thumbnailUrl : `${thumbnailUrl}?inline=1`}
-                      alt=""
                       className="mt-1.5 h-16 rounded-md border object-cover"
+                      fallback={
+                        <div className="mt-1.5 h-16 w-28 rounded-md border bg-white/[0.04] flex items-center justify-center text-base text-muted-foreground">
+                          🎬
+                        </div>
+                      }
                     />
                   ) : (
                     <Button

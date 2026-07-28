@@ -7,6 +7,7 @@ import { hasModule } from '@/lib/workspace-features';
 import { isPublishDataStale, syncPublishedVideos } from '@/lib/publish-sync';
 import { typeMeta } from '@/lib/video-type';
 import { ModuleNav } from '@/components/workspace/module-nav';
+import { ThumbnailImage } from '@/components/thumbnail-image';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,23 +104,16 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
                 key={v.id}
                 className="flex items-center gap-4 px-4 py-3 group transition-colors border-l-2 border-l-transparent hover:border-l-primary hover:bg-white/[0.02]"
               >
-                <Link
-                  href={`/workspaces/${workspaceId}/videos/${v.id}`}
-                  className="shrink-0 block"
-                >
-                  {thumb ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={thumb}
-                      alt=""
-                      className="w-24 aspect-video object-cover rounded-md"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-24 aspect-video bg-white/[0.04] rounded-md flex items-center justify-center text-lg">
-                      🎬
-                    </div>
-                  )}
+                <Link href={`/workspaces/${workspaceId}/videos/${v.id}`} className="shrink-0 block">
+                  <ThumbnailImage
+                    src={thumb}
+                    className="w-24 aspect-video object-cover rounded-md"
+                    fallback={
+                      <div className="w-24 aspect-video bg-white/[0.04] rounded-md flex items-center justify-center text-lg">
+                        🎬
+                      </div>
+                    }
+                  />
                 </Link>
                 <div className="min-w-0 flex-1">
                   <Link
