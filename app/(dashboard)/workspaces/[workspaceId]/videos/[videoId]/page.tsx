@@ -16,28 +16,58 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
   const { workspaceId, videoId } = await params;
   if (!session?.user?.id) redirect('/login');
 
-  const video = await db.video.findUnique({
-    where: { id: videoId },
-    include: {
-      project: { select: { id: true, workspaceId: true } },
-      versions: {
-        orderBy: { versionNumber: 'desc' },
-        select: {
-          id: true,
-          versionNumber: true,
-          versionLabel: true,
-          isActive: true,
-          createdAt: true,
+  // Everything this page renders, in one parallel batch. These reads are
+  // independent, so awaiting them one after another only added round trips —
+  // and assets/notes used to be fetched by the client after hydration, which
+  // meant the item painted empty and filled in a beat later.
+  const [video, workspace, assets, notes] = await Promise.all([
+    db.video.findUnique({
+      where: { id: videoId },
+      include: {
+        project: { select: { id: true, workspaceId: true } },
+        versions: {
+          orderBy: { versionNumber: 'desc' },
+          select: {
+            id: true,
+            versionNumber: true,
+            versionLabel: true,
+            isActive: true,
+            createdAt: true,
+          },
         },
       },
-    },
-  });
-  if (!video || video.project.workspaceId !== workspaceId) notFound();
+    }),
+    db.workspace.findUnique({
+      where: { id: workspaceId },
+      include: { members: { where: { userId: session.user.id }, select: { role: true } } },
+    }),
+    db.videoAsset.findMany({
+      where: { videoId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        displayName: true,
+        kind: true,
+        sizeBytes: true,
+        uploadedByGuestName: true,
+        createdAt: true,
+        uploadedByUser: { select: { name: true } },
+      },
+    }),
+    db.videoNote.findMany({
+      where: { videoId },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        author: { select: { name: true } },
+      },
+    }),
+  ]);
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    include: { members: { where: { userId: session.user.id }, select: { role: true } } },
-  });
+  if (!video || video.project.workspaceId !== workspaceId) notFound();
   if (!workspace) notFound();
 
   const access = await checkWorkspaceAccess(
@@ -90,6 +120,23 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
             createdAt: v.createdAt.toISOString(),
           })),
         }}
+        initialAssets={assets.map((a) => ({
+          id: a.id,
+          displayName: a.displayName,
+          kind: a.kind,
+          // sizeBytes is a BigInt column — it cannot cross the server/client
+          // boundary as-is, and the client only ever formats it.
+          sizeBytes: a.sizeBytes.toString(),
+          uploadedByUser: a.uploadedByUser,
+          uploadedByGuestName: a.uploadedByGuestName,
+          createdAt: a.createdAt.toISOString(),
+        }))}
+        initialNotes={notes.map((n) => ({
+          id: n.id,
+          body: n.body,
+          createdAt: n.createdAt.toISOString(),
+          author: n.author,
+        }))}
         canEdit={isAdmin || access.canEdit}
         publishReady={isWorkspacePublishReady(workspace.publishing)}
         linkedInReady={isWorkspaceLinkedInReady(workspace.publishing)}

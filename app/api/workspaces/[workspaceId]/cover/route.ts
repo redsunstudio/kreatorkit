@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
 import { createPresignedFilePutUrl, getR2FileObjectMetadata } from '@/lib/r2';
-import { proxyR2MediaObject } from '@/lib/r2-media-proxy';
+import { REPLACEABLE_MEDIA_CACHE, proxyR2MediaObject } from '@/lib/r2-media-proxy';
 import { logError } from '@/lib/logger';
 
 interface RouteParams {
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       request,
       key: workspace.coverKey,
       fallbackContentType: 'image/jpeg',
-      cacheControl: 'private, max-age=300',
+      cacheControl: REPLACEABLE_MEDIA_CACHE,
       extraHeaders: { 'X-Content-Type-Options': 'nosniff' },
       internalErrorMessage: 'Failed to retrieve cover',
     });

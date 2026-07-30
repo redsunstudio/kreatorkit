@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPresignedFileGetUrl, createPresignedInlineGetUrl } from '@/lib/r2';
+import {
+  createPresignedFileGetUrl,
+  createPresignedInlineGetUrl,
+  INLINE_REDIRECT_CACHE,
+} from '@/lib/r2';
 import { VideoAssetProvider } from '@prisma/client';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
@@ -87,7 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const presigned = await createPresignedInlineGetUrl(key, imageContentTypeFromFileName(key));
         return NextResponse.redirect(presigned, {
           status: 302,
-          headers: { 'Cache-Control': 'private, no-store' },
+          headers: { 'Cache-Control': INLINE_REDIRECT_CACHE },
         });
       }
 

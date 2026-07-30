@@ -30,9 +30,9 @@ export const VersionDeleteDialog = memo(function VersionDeleteDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete this version?</AlertDialogTitle>
+          <AlertDialogTitle>Delete this cut?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete this version and all its comments. This cannot be undone.
+            This will permanently delete this cut and all its comments. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -43,7 +43,7 @@ export const VersionDeleteDialog = memo(function VersionDeleteDialog({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {isDeletingVersion && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Delete Version
+            Delete cut
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

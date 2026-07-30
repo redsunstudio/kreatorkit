@@ -71,14 +71,14 @@ export const VersionActionsDialog = memo(function VersionActionsDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Plus className="h-4 w-4 mr-1" />
-          New Version
+          New cut
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add New Version</DialogTitle>
+          <DialogTitle>Add a new cut</DialogTitle>
           <DialogDescription>
-            Upload a new version of this video. The new version will become active.
+            Upload a new cut of this video. The new cut will become active.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-2">
@@ -173,7 +173,7 @@ export const VersionActionsDialog = memo(function VersionActionsDialog({
           )}
 
           <div className="space-y-2">
-            <Label>Version Label (optional)</Label>
+            <Label>Cut label (optional)</Label>
             <Input
               placeholder="e.g. Final Cut, Review Round 2"
               value={newVersionLabel}
@@ -206,7 +206,7 @@ export const VersionActionsDialog = memo(function VersionActionsDialog({
             className="w-full"
           >
             {isCreatingVersion && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Add Version {versionsCount + 1}
+            Add cut {versionsCount + 1}
           </Button>
         </div>
       </DialogContent>

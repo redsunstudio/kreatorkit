@@ -72,7 +72,7 @@ export function ApprovalRequestDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Request Approval</DialogTitle>
-          <DialogDescription>Select one or more approvers for this version.</DialogDescription>
+          <DialogDescription>Select one or more approvers for this cut.</DialogDescription>
         </DialogHeader>
 
         {isBlockedByPendingRequest ? (

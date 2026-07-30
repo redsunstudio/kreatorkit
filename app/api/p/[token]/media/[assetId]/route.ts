@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiErrors } from '@/lib/api-response';
 import { getPostReviewByToken, resolveReviewMedia, reviewAssetKey } from '@/lib/post-review';
-import { createPresignedInlineGetUrl } from '@/lib/r2';
+import { createPresignedInlineGetUrl, INLINE_REDIRECT_CACHE } from '@/lib/r2';
 import { logError } from '@/lib/logger';
 
 interface RouteParams {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const presigned = await createPresignedInlineGetUrl(key, contentTypeFromKey(key));
     return NextResponse.redirect(presigned, {
       status: 302,
-      headers: { 'Cache-Control': 'private, no-store' },
+      headers: { 'Cache-Control': INLINE_REDIRECT_CACHE },
     });
   } catch (error) {
     logError('review media failed:', error);

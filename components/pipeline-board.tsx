@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Check,
@@ -259,7 +258,6 @@ export function PipelineBoard({
   canEdit,
   allowPosts,
 }: PipelineBoardProps) {
-  const router = useRouter();
   const [items, setItems] = useState<PipelineVideo[]>(videos);
   const [view, setView] = useState<'list' | 'board'>('list');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -337,7 +335,9 @@ export function PipelineBoard({
       setBrief('');
       setPostCopy('');
       setVideoType('LONGFORM');
-      router.refresh();
+      // The new row is already in `items` above with everything the pipeline
+      // renders, so refreshing the route only re-fetched the whole list to
+      // arrive back at the same screen.
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not create the item');
     } finally {

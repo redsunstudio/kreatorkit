@@ -353,6 +353,18 @@ export async function createPresignedFileGetUrl(
   return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
 }
 
+/**
+ * How long a browser may reuse a 302 that points at an inline presigned URL.
+ *
+ * Deliberately far shorter than the 12h presign TTL below, so a cached redirect
+ * can never outlive the URL it hands out. Without this the redirect was
+ * `no-store`, which meant every thumbnail on every board and shelf re-hit this
+ * app (rate limit + auth + DB + a fresh presign) and re-pulled the bytes from
+ * storage on every navigation — the platform's biggest source of felt lag, and
+ * the main driver of the B2 daily-download cap incidents.
+ */
+export const INLINE_REDIRECT_CACHE = 'private, max-age=3600, stale-while-revalidate=21600';
+
 export async function createPresignedInlineGetUrl(
   objectKey: string,
   contentType: string,

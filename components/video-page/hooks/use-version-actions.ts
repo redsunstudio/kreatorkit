@@ -298,7 +298,7 @@ export function useVersionActions({
 
       setShowDeleteVersionDialog(false);
       setVersionToDelete(null);
-      toast.success('Version deleted');
+      toast.success('Cut deleted');
     } catch (err) {
       const errorObj = err as Error;
       console.error('Failed to delete version:', errorObj);

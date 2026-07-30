@@ -167,7 +167,7 @@ export const VideoPageHeader = memo(function VideoPageHeader({
                 v{activeVersion.versionNumber}
               </Badge>
               <span className="truncate">
-                {activeVersion.versionLabel || `Version ${activeVersion.versionNumber}`}
+                {activeVersion.versionLabel || `Cut ${activeVersion.versionNumber}`}
               </span>
               <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
             </Button>
@@ -181,7 +181,7 @@ export const VideoPageHeader = memo(function VideoPageHeader({
                 >
                   v{version.versionNumber}
                 </Badge>
-                {version.versionLabel || `Version ${version.versionNumber}`}
+                {version.versionLabel || `Cut ${version.versionNumber}`}
                 <span className="ml-auto text-xs text-muted-foreground">
                   {version._count.comments} comments
                 </span>
@@ -259,7 +259,7 @@ export const VideoPageHeader = memo(function VideoPageHeader({
                   {canManageVideo ? (
                     <DropdownMenuItem onSelect={() => setShowVersionDialog(true)}>
                       <Plus className="h-4 w-4 mr-2" />
-                      New Version
+                      New cut
                     </DropdownMenuItem>
                   ) : null}
                   <DropdownMenuItem onSelect={onOpenApprovalsPanel}>

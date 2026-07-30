@@ -15,45 +15,76 @@ import { ThumbnailImage } from '@/components/thumbnail-image';
 
 interface WorkspacePageProps {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ page?: string }>;
 }
 
-export default async function WorkspacePage({ params, searchParams }: WorkspacePageProps) {
+/** One line of brief is all the pipeline row shows — it truncates at ~240px. */
+const BRIEF_PREVIEW_CHARS = 160;
+
+export default async function WorkspacePage({ params }: WorkspacePageProps) {
   const session = await auth();
   const { workspaceId } = await params;
-  const resolvedSearchParams = await searchParams;
-  const MAX_PAGE = 1000;
 
   if (!session?.user?.id) {
     redirect('/login');
   }
 
-  const pageParam = resolvedSearchParams?.page;
-  const parsedPage = pageParam ? Number(pageParam) : 1;
-  const page =
-    Number.isSafeInteger(parsedPage) && parsedPage > 0 && parsedPage <= MAX_PAGE ? parsedPage : 1;
-  const pageSize = 20;
-  const skip = (page - 1) * pageSize;
+  // The workspace, its pipeline items and the archive tally are independent
+  // reads keyed off the same id, so they go out together instead of in a chain.
+  // Published and archived items are excluded in SQL rather than fetched and
+  // then dropped in JS, and only the fields the board actually renders are
+  // selected — this page used to pull 300 full video rows (whole brief bodies
+  // included) plus a page of projects that nothing on screen uses.
+  const PIPELINE_STATUS_FILTER = {
+    project: { workspaceId },
+    status: { notIn: ['ARCHIVED' as const, 'PUBLISHED' as const] },
+  };
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    include: {
-      owner: { select: { id: true, name: true } },
-      members: {
-        where: { userId: session.user.id },
-        select: { role: true },
-      },
-      projects: {
-        orderBy: { updatedAt: 'desc' },
-        skip,
-        take: pageSize,
-        include: {
-          _count: { select: { videos: true, members: true } },
+  const [workspace, activeVideos, archivedCount, latestCutRows] = await Promise.all([
+    db.workspace.findUnique({
+      where: { id: workspaceId },
+      include: {
+        owner: { select: { id: true, name: true } },
+        members: {
+          where: { userId: session.user.id },
+          select: { role: true },
         },
+        _count: { select: { projects: true, members: true } },
       },
-      _count: { select: { projects: true, members: true } },
-    },
-  });
+    }),
+    db.video.findMany({
+      where: PIPELINE_STATUS_FILTER,
+      orderBy: { updatedAt: 'desc' },
+      take: 300,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        videoType: true,
+        brief: true,
+        projectId: true,
+        thumbnailUrl: true,
+        packagingConfirmedAt: true,
+        membersOnly: true,
+        versions: {
+          where: { isActive: true },
+          orderBy: { versionNumber: 'desc' },
+          take: 1,
+          select: { id: true, thumbnailUrl: true, _count: { select: { comments: true } } },
+        },
+        _count: { select: { versions: true } },
+      },
+    }),
+    db.video.count({ where: { project: { workspaceId }, status: 'ARCHIVED' } }),
+    // Newest cut per item — the ACTIVE version is not always the latest upload,
+    // so this stays a separate aggregate. Filtering by the same relation as the
+    // item query (rather than by a list of ids it returns) is what lets it ride
+    // along in this batch instead of waiting for a second round trip.
+    db.videoVersion.groupBy({
+      by: ['videoId'],
+      where: { video: PIPELINE_STATUS_FILTER },
+      _max: { createdAt: true },
+    }),
+  ]);
 
   if (!workspace) {
     notFound();
@@ -72,36 +103,6 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     redirect('/dashboard');
   }
 
-  // KreatorKit flattened view: every video item across the workspace's (hidden) projects
-  const workspaceVideos = await db.video.findMany({
-    where: { project: { workspaceId } },
-    orderBy: { updatedAt: 'desc' },
-    take: 300,
-    include: {
-      versions: {
-        where: { isActive: true },
-        orderBy: { versionNumber: 'desc' },
-        take: 1,
-        select: { id: true, thumbnailUrl: true, _count: { select: { comments: true } } },
-      },
-      _count: { select: { versions: true } },
-    },
-  });
-  // Published + archived items live off the pipeline (Published tab / Archive)
-  const activeVideos = workspaceVideos.filter(
-    (v) => v.status !== 'ARCHIVED' && v.status !== 'PUBLISHED'
-  );
-  const archivedCount = workspaceVideos.filter((v) => v.status === 'ARCHIVED').length;
-
-  // Newest cut per item — the active version is not always the latest upload, so
-  // this is a separate aggregate rather than a field on the included version.
-  const latestCutRows = activeVideos.length
-    ? await db.videoVersion.groupBy({
-        by: ['videoId'],
-        where: { videoId: { in: activeVideos.map((v) => v.id) } },
-        _max: { createdAt: true },
-      })
-    : [];
   const latestCutAtByVideo = new Map(
     latestCutRows.map((r) => [r.videoId, r._max.createdAt?.toISOString() ?? null])
   );
@@ -111,7 +112,9 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     title: v.title,
     status: v.status,
     videoType: v.videoType,
-    brief: v.brief,
+    // Preview only — shipping whole brief bodies for every item made the
+    // payload balloon for text nobody can read at this size.
+    brief: v.brief ? v.brief.slice(0, BRIEF_PREVIEW_CHARS) : null,
     currentVersion: v._count.versions,
     commentCount: v.versions[0]?._count.comments ?? 0,
     projectId: v.projectId,

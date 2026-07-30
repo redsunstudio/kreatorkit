@@ -9,6 +9,25 @@ import { apiErrors } from '@/lib/api-response';
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2';
 import { logError } from '@/lib/logger';
 
+/**
+ * Cache policy for media whose URL is minted per object (UUID keys, per-asset
+ * ids) — the bytes behind a given URL never change, so the browser should never
+ * ask twice. These were all `no-store`, which meant every pipeline board and
+ * workspace shelf re-hit the app (rate limit + auth + DB + presign per image)
+ * and re-pulled every thumbnail from storage on every single navigation. That
+ * was the platform's biggest source of felt slowness, and the main driver of
+ * the B2 daily-download cap incidents.
+ */
+export const IMMUTABLE_MEDIA_CACHE = 'private, max-age=86400, stale-while-revalidate=604800';
+
+/**
+ * Cache policy for a STABLE url whose bytes can be replaced (e.g. the workspace
+ * cover lives at /api/workspaces/{id}/cover regardless of which object backs
+ * it). Paints instantly from cache, revalidates in the background, so a newly
+ * uploaded cover still appears promptly — and revalidation is now a cheap 304.
+ */
+export const REPLACEABLE_MEDIA_CACHE = 'private, max-age=60, stale-while-revalidate=86400';
+
 type ProxyR2MediaOptions = {
   request: Request;
   key: string;
@@ -55,6 +74,10 @@ function isPreconditionFailed(error: unknown): boolean {
   return getErrorStatus(error) === 412;
 }
 
+function isNotModified(error: unknown): boolean {
+  return getErrorStatus(error) === 304;
+}
+
 function toWebStream(body: unknown): ReadableStream<Uint8Array> | null {
   if (!body) return null;
 
@@ -94,10 +117,21 @@ export async function proxyR2MediaObject({
 }: ProxyR2MediaOptions): Promise<NextResponse> {
   const range = request.headers.get('range');
   const ifRange = request.headers.get('if-range');
+  const ifNoneMatch = request.headers.get('if-none-match');
   const commandInput: GetObjectCommandInput = {
     Bucket: R2_BUCKET_NAME,
     Key: key,
   };
+
+  // Revalidation shortcut: hand the client's ETag to storage so an unchanged
+  // object comes back as a 304 we can pass straight through, instead of pulling
+  // the whole body down again just to discard it. Storage that ignores
+  // IfNoneMatch simply answers 200 and we serve normally.
+  let usedConditionalIfNoneMatch = false;
+  if (!range && ifNoneMatch) {
+    commandInput.IfNoneMatch = ifNoneMatch;
+    usedConditionalIfNoneMatch = true;
+  }
 
   let usedConditionalIfRange = false;
   if (range) {
@@ -146,6 +180,13 @@ export async function proxyR2MediaObject({
         logError('Error proxying R2 object:', retryError);
         return apiErrors.internalError(internalErrorMessage);
       }
+    } else if (usedConditionalIfNoneMatch && isNotModified(error)) {
+      const notModified = new NextResponse(null, {
+        status: 304,
+        headers: { 'Cache-Control': cacheControl },
+      });
+      if (ifNoneMatch) notModified.headers.set('ETag', ifNoneMatch);
+      return notModified;
     } else if (isNotFoundError(error)) {
       return apiErrors.notFound(notFoundLabel);
     } else if (isInvalidRangeError(error)) {

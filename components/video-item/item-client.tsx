@@ -93,6 +93,13 @@ interface Asset {
   createdAt: string;
 }
 
+interface Note {
+  id: string;
+  body: string;
+  createdAt: string;
+  author?: { name: string | null } | null;
+}
+
 interface VideoItemClientProps {
   workspaceId: string;
   video: ItemVideo;
@@ -100,6 +107,14 @@ interface VideoItemClientProps {
   publishReady?: boolean;
   linkedInReady?: boolean;
   allowPosts?: boolean;
+  /**
+   * Assets and notes rendered server-side with the rest of the item. Passing
+   * them means the page paints complete instead of painting empty and then
+   * popping content in after two round trips that could only start once the
+   * bundle had downloaded and hydrated.
+   */
+  initialAssets?: Asset[];
+  initialNotes?: Note[];
 }
 
 function fmtSize(b?: string | number | null): string {
@@ -123,6 +138,8 @@ export function VideoItemClient({
   publishReady,
   linkedInReady,
   allowPosts,
+  initialAssets,
+  initialNotes,
 }: VideoItemClientProps) {
   const router = useRouter();
   const [status, setStatus] = useState(video.status);
@@ -148,8 +165,8 @@ export function VideoItemClient({
   const [titleDraft, setTitleDraft] = useState(video.title);
   const [editingTitle, setEditingTitle] = useState(false);
   const [savingTitle, setSavingTitle] = useState(false);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const [assets, setAssets] = useState<Asset[]>(initialAssets ?? []);
+  const [assetsLoaded, setAssetsLoaded] = useState(!!initialAssets);
   const [uploads, setUploads] = useState<{ name: string; pct: number; state: string }[]>([]);
   const [uploadingCut, setUploadingCut] = useState<string | null>(null);
   const [uploadingThumb, setUploadingThumb] = useState(false);
@@ -157,9 +174,7 @@ export function VideoItemClient({
   const [archiving, setArchiving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [notes, setNotes] = useState<
-    { id: string; body: string; createdAt: string; author?: { name: string | null } | null }[]
-  >([]);
+  const [notes, setNotes] = useState<Note[]>(initialNotes ?? []);
   const [noteDraft, setNoteDraft] = useState('');
   const [packagedAt, setPackagedAt] = useState<string | null>(video.packagingConfirmedAt ?? null);
   const [packagedBy, setPackagedBy] = useState<string | null>(video.packagingConfirmedName ?? null);
@@ -196,9 +211,16 @@ export function VideoItemClient({
     setNotes(d.data?.notes ?? []);
   }, [video.id]);
 
+  // Server-rendered assets/notes are already on screen, so the mount pass has
+  // nothing to fetch — re-fetching them would just repeat two round trips for
+  // identical data. Later refreshes still go through loadAssets/loadNotes.
+  const seededFromServer = useRef(!!initialAssets && !!initialNotes);
   useEffect(() => {
+    if (seededFromServer.current) {
+      seededFromServer.current = false;
+      return;
+    }
     void loadAssets();
-
     void loadNotes();
   }, [loadAssets, loadNotes]);
 
@@ -283,8 +305,11 @@ export function VideoItemClient({
     const prev = status;
     setStatus(next);
     try {
+      // No refresh: the new status is already on screen and nothing else the
+      // page renders comes from the server copy. Re-rendering the whole route
+      // just to land on the value we optimistically set added a visible stall
+      // to every stage move.
       await patchItem({ status: next });
-      router.refresh();
     } catch {
       setStatus(prev);
       toast.error('Could not change status');
@@ -372,7 +397,6 @@ export function VideoItemClient({
       await patchItem({ title: next });
       setTitle(next);
       setEditingTitle(false);
-      router.refresh();
     } catch {
       toast.error('Could not rename the video');
     } finally {
@@ -393,8 +417,9 @@ export function VideoItemClient({
       if (!r.ok) throw new Error(d?.error?.message || 'Push failed');
       toast.success('Pushed 📺 — it lands in YouTube Studio as a private draft');
       setPublishOpen(false);
+      // loadNotes() already pulls in the push note the server left behind, so
+      // there is nothing further for a route refresh to reveal.
       await loadNotes();
-      router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Push failed');
     } finally {
@@ -436,7 +461,6 @@ export function VideoItemClient({
       setPublishOpen(false);
       setScheduleFor('');
       await loadNotes();
-      router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Push failed');
     } finally {
@@ -650,6 +674,8 @@ export function VideoItemClient({
           ? 'REVIEW'
           : s
       );
+      // Refresh is required here: the cut list renders from server props, so a
+      // newly created version row only appears on a re-render.
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Cut upload failed');
@@ -674,6 +700,8 @@ export function VideoItemClient({
       );
       setArchiveOpen(false);
       await loadAssets();
+      // Refresh is required here: archiving deletes version rows, and those
+      // render from server props.
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not archive');
@@ -812,7 +840,6 @@ export function VideoItemClient({
       setStatus('APPROVED');
       toast.success('Approved ✅');
       await loadNotes();
-      router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not approve');
     } finally {

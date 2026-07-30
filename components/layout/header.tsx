@@ -6,15 +6,12 @@ import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import {
   Video,
-  FolderOpen,
-  Building2,
   Settings,
   LogOut,
   User,
   Menu,
   Keyboard,
   LayoutDashboard,
-  MessageSquareQuote,
   Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -46,12 +43,6 @@ const SearchModal = dynamic(
   () => import('@/components/search-modal').then((mod) => mod.SearchModal),
   { ssr: false }
 );
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
 
 const navItems: { href: string; label: string; emoji: string }[] = [
   { href: '/workspaces', label: 'Workspaces', emoji: '🗂️' },

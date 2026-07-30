@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
 import { createPresignedFileGetUrl, deleteR2Object } from '@/lib/r2';
-import { proxyR2MediaObject } from '@/lib/r2-media-proxy';
+import { IMMUTABLE_MEDIA_CACHE, proxyR2MediaObject } from '@/lib/r2-media-proxy';
 import { logError } from '@/lib/logger';
 
 interface RouteParams {
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         request,
         key: asset.objectKey,
         fallbackContentType: asset.contentType || 'application/octet-stream',
-        cacheControl: 'private, max-age=300',
+        cacheControl: IMMUTABLE_MEDIA_CACHE,
         extraHeaders: { 'X-Content-Type-Options': 'nosniff' },
         internalErrorMessage: 'Failed to retrieve asset',
       });
@@ -65,7 +65,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       { id: asset.workspace.id, ownerId: asset.workspace.ownerId },
       session.user.id
     );
-    if (!access.canEdit) return apiErrors.forbidden('Only workspace admins can delete brand assets');
+    if (!access.canEdit)
+      return apiErrors.forbidden('Only workspace admins can delete brand assets');
 
     await db.workspaceAsset.delete({ where: { id: asset.id } });
     try {

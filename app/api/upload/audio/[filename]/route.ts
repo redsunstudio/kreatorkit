@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { validateShareLinkAccess } from '@/lib/share-links';
 import { getShareSessionFromRequest } from '@/lib/share-session';
 import { apiErrors } from '@/lib/api-response';
-import { proxyR2MediaObject } from '@/lib/r2-media-proxy';
+import { IMMUTABLE_MEDIA_CACHE, proxyR2MediaObject } from '@/lib/r2-media-proxy';
 import { logError } from '@/lib/logger';
 
 // Only allow UUID filenames with safe extensions
@@ -95,7 +95,7 @@ export async function GET(
       request,
       key,
       fallbackContentType: getContentType(filename),
-      cacheControl: 'private, no-store',
+      cacheControl: IMMUTABLE_MEDIA_CACHE,
       extraHeaders: {
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "default-src 'none'; sandbox",
