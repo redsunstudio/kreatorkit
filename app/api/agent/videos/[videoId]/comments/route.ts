@@ -129,3 +129,96 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return apiErrors.internalError('Failed to load comments');
   }
 }
+
+// POST /api/agent/videos/[videoId]/comments — write a timestamped note onto a cut.
+//
+// The agent rail could read review threads but not write to them, so an automated pass had
+// no way to leave a marker on the timeline: "the screenshare runs from here to here", "this
+// is the seam", "this needs a pickup". Those are exactly the notes a human would otherwise
+// have to place by hand while scrubbing.
+//
+// Defaults to the ACTIVE version, because that is the cut the client is looking at; pass
+// versionId to pin a note to an older one. `timestampEnd` makes it a range marker rather
+// than a point, which is what a screenshare or a chapter actually is.
+//
+// Agent comments are attributed to a guest name rather than borrowed from a real user, so a
+// machine-written note is never mistaken for the client's own feedback in the thread.
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    const { videoId } = await params;
+    const body = await request.json().catch(() => null);
+
+    const content = typeof body?.content === 'string' ? body.content.trim() : '';
+    const timestamp = typeof body?.timestamp === 'number' ? body.timestamp : NaN;
+    const timestampEnd = typeof body?.timestampEnd === 'number' ? body.timestampEnd : null;
+    const authorName =
+      typeof body?.authorName === 'string' && body.authorName.trim()
+        ? body.authorName.trim().slice(0, 80)
+        : 'Agency OS';
+    const parentId = typeof body?.parentId === 'string' ? body.parentId : null;
+    const wantVersionId = typeof body?.versionId === 'string' ? body.versionId : null;
+
+    if (!content) return apiErrors.badRequest('content is required');
+    if (!Number.isFinite(timestamp) || timestamp < 0) {
+      return apiErrors.badRequest('timestamp (seconds, >= 0) is required');
+    }
+    if (timestampEnd !== null && !(timestampEnd > timestamp)) {
+      return apiErrors.badRequest('timestampEnd must be greater than timestamp');
+    }
+
+    const video = await db.video.findUnique({
+      where: { id: videoId },
+      select: {
+        id: true,
+        versions: {
+          orderBy: { versionNumber: 'desc' },
+          select: { id: true, isActive: true, versionNumber: true },
+        },
+      },
+    });
+    if (!video) return apiErrors.notFound('Video');
+
+    const version = wantVersionId
+      ? video.versions.find((v) => v.id === wantVersionId)
+      : (video.versions.find((v) => v.isActive) ?? video.versions[0]);
+    if (!version) {
+      return apiErrors.badRequest(
+        wantVersionId ? 'versionId not found on this video' : 'video has no cut to comment on'
+      );
+    }
+
+    // A reply must hang off a comment on the SAME version, or the thread would render
+    // split across two cuts.
+    if (parentId) {
+      const parent = await db.comment.findUnique({
+        where: { id: parentId },
+        select: { id: true, versionId: true },
+      });
+      if (!parent || parent.versionId !== version.id) {
+        return apiErrors.badRequest('parentId must be a comment on the same version');
+      }
+    }
+
+    const comment = await db.comment.create({
+      data: {
+        content,
+        timestamp,
+        timestampEnd,
+        parentId,
+        guestName: authorName,
+        versionId: version.id,
+      },
+      select: commentSelect,
+    });
+
+    return successResponse({
+      ...shapeComment(comment),
+      versionId: version.id,
+      versionNumber: version.versionNumber,
+    });
+  } catch (error) {
+    logError('agent comment create failed:', error);
+    return apiErrors.internalError('Failed to create comment');
+  }
+}
