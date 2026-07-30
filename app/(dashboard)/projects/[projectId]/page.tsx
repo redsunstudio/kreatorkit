@@ -139,7 +139,6 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
 
   const totalPages = Math.ceil(totalVideos / pageSize);
 
-  // Transform videos for VideoCard component
   const videos = paginatedVideos.map((video) => {
     const activeVersion = video.versions[0];
     return {

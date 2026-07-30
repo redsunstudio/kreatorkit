@@ -1,10 +1,10 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth, checkProjectAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { validateShareLinkAccess } from '@/lib/share-links';
 import { getShareSessionFromRequest } from '@/lib/share-session';
 import { apiErrors } from '@/lib/api-response';
-import { IMMUTABLE_MEDIA_CACHE, proxyR2MediaObject } from '@/lib/r2-media-proxy';
+import { createPresignedInlineGetUrl, INLINE_REDIRECT_CACHE } from '@/lib/r2';
 import { logError } from '@/lib/logger';
 
 // Only allow UUID filenames with safe extensions
@@ -108,17 +108,17 @@ export async function GET(
       }
     }
 
+    // Redirect to a short-lived presigned URL instead of piping the body
+    // through the app — consistent with every other media route after the
+    // 2026-07-13 OOM incident. This one was left piping because 10MB is
+    // bounded and safe, but there is no cost to bringing it in line, and the
+    // browser can now cache the redirect itself instead of re-hitting this
+    // route (auth + 3 DB lookups + a fresh presign) on every repeat view.
     const key = `images/${filename}`;
-    return proxyR2MediaObject({
-      request,
-      key,
-      fallbackContentType: getContentType(filename),
-      cacheControl: IMMUTABLE_MEDIA_CACHE,
-      extraHeaders: {
-        'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "default-src 'none'; sandbox",
-      },
-      internalErrorMessage: 'Failed to retrieve image',
+    const presigned = await createPresignedInlineGetUrl(key, getContentType(filename));
+    return NextResponse.redirect(presigned, {
+      status: 302,
+      headers: { 'Cache-Control': INLINE_REDIRECT_CACHE },
     });
   } catch (error: unknown) {
     logError('Error serving image:', error);
