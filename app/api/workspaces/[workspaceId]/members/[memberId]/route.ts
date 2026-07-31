@@ -5,6 +5,7 @@ import { WorkspaceMemberRole } from '@prisma/client';
 import { rateLimit } from '@/lib/rate-limit';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { logError } from '@/lib/logger';
+import { removeWorkspaceMember } from '@/lib/workspace-members';
 
 type RouteParams = { params: Promise<{ workspaceId: string; memberId: string }> };
 
@@ -120,28 +121,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return apiErrors.forbidden('Access denied');
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.projectMember.deleteMany({
-        where: {
-          userId: memberToRemove.userId,
-          project: {
-            workspaceId,
-          },
-        },
-      });
-
-      await tx.project.updateMany({
-        where: {
-          workspaceId,
-          ownerId: memberToRemove.userId,
-        },
-        data: {
-          ownerId: workspace.ownerId,
-        },
-      });
-
-      await tx.workspaceMember.delete({ where: { id: memberToRemove.id } });
-    });
+    await removeWorkspaceMember(workspaceId, memberToRemove.userId);
 
     const response = successResponse({ message: 'Member removed' });
     return withCacheControl(response, 'private, no-store');

@@ -424,10 +424,13 @@ export default async function AdminUsersPage({
                   paginatedUsers.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
-                        <div className="flex flex-col">
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          className="flex flex-col hover:underline"
+                        >
                           <span className="font-medium">{user.name || 'Anonymous'}</span>
                           <span className="text-xs text-muted-foreground">{user.email}</span>
-                        </div>
+                        </Link>
                       </TableCell>
                       <TableCell>{format(new Date(user.createdAt), 'MMM dd, yyyy')}</TableCell>
                       <TableCell className="text-center">{user._count.ownedWorkspaces}</TableCell>
