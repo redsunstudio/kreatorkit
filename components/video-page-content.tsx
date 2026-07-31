@@ -600,7 +600,7 @@ export function VideoPageContent({
     setVideo,
   });
 
-  const containerHeight = 'h-screen';
+  const containerHeight = 'h-dvh';
   const backHref =
     backHrefOverride ??
     (mode === 'dashboard'

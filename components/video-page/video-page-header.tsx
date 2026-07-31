@@ -209,6 +209,16 @@ export const VideoPageHeader = memo(function VideoPageHeader({
           onDelete={onDeleteVersion}
         />
 
+        <div className="sm:hidden">
+          <DownloadControls
+            activeVersion={activeVersion}
+            videoCanDownload={videoCanDownload}
+            isDownloading={isDownloadingVideo}
+            activeDownloadTarget={activeDownloadTarget}
+            onDownload={onDownload}
+            compact
+          />
+        </div>
         <div className="hidden sm:block">
           <DownloadControls
             activeVersion={activeVersion}

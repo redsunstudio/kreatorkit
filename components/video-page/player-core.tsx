@@ -10,6 +10,7 @@ import {
   MessageSquare,
   MessageSquareOff,
   Minimize,
+  MoreHorizontal,
   Pause,
   Play,
   SkipBack,
@@ -23,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -398,60 +400,121 @@ export const PlayerCore = memo(function PlayerCore({
           </span>
 
           <div className="ml-auto flex items-center">
-            <Button
-              variant={isFrameMode ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 gap-1 text-xs"
-              onClick={handleFrameModeToggle}
-              title="Toggle frame step mode"
-            >
-              Frame {frameStepLabel}
-            </Button>
+            {/* Frame step / Quality / Speed: inline on larger screens, folded into the
+                "More" menu below lg so the mobile control row doesn't overflow. */}
+            <div className="hidden lg:flex items-center">
+              <Button
+                variant={isFrameMode ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 gap-1 text-xs"
+                onClick={handleFrameModeToggle}
+                title="Toggle frame step mode"
+              >
+                Frame {frameStepLabel}
+              </Button>
 
-            {activeProviderId === 'bunny' && (
+              {activeProviderId === 'bunny' && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
+                      Quality {selectedQualityLabel}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[120px]">
+                    <DropdownMenuItem
+                      onClick={() => handleQualityChange(-1)}
+                      className={cn(selectedQualityLevel === -1 && 'font-bold text-primary')}
+                    >
+                      Auto
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleQualityChange(-2)}
+                      className={cn(selectedQualityLevel === -2 && 'font-bold text-primary')}
+                    >
+                      Original
+                    </DropdownMenuItem>
+                    {qualityOptions.length > 0 && <DropdownMenuSeparator />}
+                    {qualityOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.level}
+                        onClick={() => handleQualityChange(option.level)}
+                        className={cn(
+                          option.level === selectedQualityLevel && 'font-bold text-primary'
+                        )}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
-                    Quality {selectedQualityLabel}
+                    <Gauge className="h-3.5 w-3.5" />
+                    {playbackSpeed === 1 ? '1x' : `${playbackSpeed}x`}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[120px]">
-                  <DropdownMenuItem
-                    onClick={() => handleQualityChange(-1)}
-                    className={cn(selectedQualityLevel === -1 && 'font-bold text-primary')}
-                  >
-                    Auto
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => handleQualityChange(-2)}
-                    className={cn(selectedQualityLevel === -2 && 'font-bold text-primary')}
-                  >
-                    Original
-                  </DropdownMenuItem>
-                  {qualityOptions.length > 0 && <DropdownMenuSeparator />}
-                  {qualityOptions.map((option) => (
+                <DropdownMenuContent align="end" className="min-w-[80px]">
+                  {speedOptions.map((speed) => (
                     <DropdownMenuItem
-                      key={option.level}
-                      onClick={() => handleQualityChange(option.level)}
-                      className={cn(
-                        option.level === selectedQualityLevel && 'font-bold text-primary'
-                      )}
+                      key={speed}
+                      onClick={() => handleSpeedChange(speed)}
+                      className={cn(speed === playbackSpeed && 'font-bold text-primary')}
                     >
-                      {option.label}
+                      {speed}x
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
+            </div>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
-                  <Gauge className="h-3.5 w-3.5" />
-                  {playbackSpeed === 1 ? '1x' : `${playbackSpeed}x`}
+                <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden">
+                  <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[80px]">
+              <DropdownMenuContent align="end" className="min-w-[160px] lg:hidden">
+                <DropdownMenuItem onClick={handleFrameModeToggle}>
+                  Frame step ({frameStepLabel}) {isFrameMode ? '— on' : ''}
+                </DropdownMenuItem>
+                {activeProviderId === 'bunny' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Quality
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={() => handleQualityChange(-1)}
+                      className={cn(selectedQualityLevel === -1 && 'font-bold text-primary')}
+                    >
+                      Auto
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleQualityChange(-2)}
+                      className={cn(selectedQualityLevel === -2 && 'font-bold text-primary')}
+                    >
+                      Original
+                    </DropdownMenuItem>
+                    {qualityOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.level}
+                        onClick={() => handleQualityChange(option.level)}
+                        className={cn(
+                          option.level === selectedQualityLevel && 'font-bold text-primary'
+                        )}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  Speed
+                </DropdownMenuLabel>
                 {speedOptions.map((speed) => (
                   <DropdownMenuItem
                     key={speed}
