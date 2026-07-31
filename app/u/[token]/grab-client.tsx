@@ -5,11 +5,7 @@ import { Check, CloudUpload, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import {
-  MULTIPART_PART_BYTES,
-  MULTIPART_THRESHOLD_BYTES,
-  uploadPartsWithProgress,
-} from '@/lib/client/r2-video-upload';
+import { uploadDriveFile } from '@/lib/client/drive-upload';
 
 interface GrabClientProps {
   token: string;
@@ -33,23 +29,6 @@ function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
-function putWithProgress(url: string, file: File, onProgress: (pct: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url);
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`Upload failed (${xhr.status})`));
-    xhr.onerror = () => reject(new Error('Network error during upload'));
-    xhr.send(file);
-  });
 }
 
 /**
@@ -84,42 +63,12 @@ export function GrabClient({ token, workspaceName, accent, label }: GrabClientPr
   const uploadOne = useCallback(
     async (file: File, key: string, who: string) => {
       setRow(key, { state: 'uploading', pct: 0 });
-      const useMultipart = file.size > MULTIPART_THRESHOLD_BYTES;
-      const partCount = useMultipart ? Math.ceil(file.size / MULTIPART_PART_BYTES) : undefined;
-
-      const initRes = await fetch(`/api/u/${token}/init`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type || 'application/octet-stream',
-          sizeBytes: file.size,
-          ...(partCount ? { partCount } : {}),
-        }),
+      await uploadDriveFile(file, {
+        initUrl: `/api/u/${token}/init`,
+        completeUrl: `/api/u/${token}/complete`,
+        completeExtra: { uploaderName: who || undefined },
+        onProgress: (pct) => setRow(key, { pct }),
       });
-      const init = await initRes.json().catch(() => null);
-      if (!initRes.ok) throw new Error(init?.error?.message || 'Could not start the upload');
-
-      if (init.data.partUrls) {
-        await uploadPartsWithProgress(file, init.data.partUrls, (pct) => setRow(key, { pct }));
-      } else {
-        await putWithProgress(init.data.presignedPutUrl, file, (pct) => setRow(key, { pct }));
-      }
-
-      const doneRes = await fetch(`/api/u/${token}/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          objectKey: init.data.objectKey,
-          uploadId: init.data.uploadId ?? undefined,
-          displayName: init.data.displayName,
-          uploaderName: who || undefined,
-        }),
-      });
-      if (!doneRes.ok) {
-        const err = await doneRes.json().catch(() => null);
-        throw new Error(err?.error?.message || 'Upload could not be saved');
-      }
       setRow(key, { state: 'done', pct: 100 });
     },
     [setRow, token]

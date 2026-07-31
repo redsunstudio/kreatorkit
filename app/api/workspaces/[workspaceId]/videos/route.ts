@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
 import { logError } from '@/lib/logger';
+import { findOrCreateDefaultProject } from '@/lib/workspace-video';
 
 interface RouteParams {
   params: Promise<{ workspaceId: string }>;
@@ -53,24 +54,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    let project = await db.project.findFirst({
-      where: { workspaceId },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-    if (!project) {
-      project = await db.project.create({
-        data: {
-          name: 'Content',
-          slug: `content-${workspaceId.slice(-8)}-${Date.now().toString(36)}`,
-          description: null,
-          workspaceId,
-          ownerId: workspace.ownerId,
-          visibility: 'PRIVATE',
-        },
-        select: { id: true },
-      });
-    }
+    const project = await findOrCreateDefaultProject(workspaceId, workspace.ownerId);
 
     const last = await db.video.findFirst({
       where: { projectId: project.id },

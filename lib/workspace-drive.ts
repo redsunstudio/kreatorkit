@@ -73,6 +73,8 @@ export interface DriveFileDTO {
   sizeBytes: string;
   uploaderName: string | null;
   linkLabel: string | null;
+  folderId: string | null;
+  folderName: string | null;
   createdAt: string;
 }
 
@@ -84,6 +86,7 @@ export function driveFileDTO(f: {
   uploaderName: string | null;
   createdAt: Date;
   link?: { label: string | null } | null;
+  folder?: { id: string; name: string } | null;
 }): DriveFileDTO {
   return {
     id: f.id,
@@ -92,6 +95,39 @@ export function driveFileDTO(f: {
     sizeBytes: f.sizeBytes.toString(),
     uploaderName: f.uploaderName,
     linkLabel: f.link?.label ?? null,
+    folderId: f.folder?.id ?? null,
+    folderName: f.folder?.name ?? null,
+    createdAt: f.createdAt.toISOString(),
+  };
+}
+
+export const DRIVE_FOLDER_NAME_MAX = 120;
+
+/** Same shape as sanitizeDriveFileName so both accept the same charset — a
+ * folder auto-created from a dropped directory name goes through this too. */
+export function sanitizeFolderName(name: string): string {
+  const base = name.replace(/^.*[\\/]/, '').trim();
+  const cleaned = base.replace(/[^A-Za-z0-9._ ()-]/g, '_').slice(0, DRIVE_FOLDER_NAME_MAX);
+  return cleaned || 'Untitled folder';
+}
+
+export interface DriveFolderDTO {
+  id: string;
+  name: string;
+  fileCount: number;
+  createdAt: string;
+}
+
+export function driveFolderDTO(f: {
+  id: string;
+  name: string;
+  createdAt: Date;
+  _count: { uploads: number };
+}): DriveFolderDTO {
+  return {
+    id: f.id,
+    name: f.name,
+    fileCount: f._count.uploads,
     createdAt: f.createdAt.toISOString(),
   };
 }

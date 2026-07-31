@@ -226,8 +226,9 @@ model Workspace {
   invitations Invitation[]
   brandAssets WorkspaceAsset[]
   tasks       WorkspaceTask[]
-  uploadLinks WorkspaceUploadLink[]
-  driveFiles  WorkspaceUpload[]
+  uploadLinks   WorkspaceUploadLink[]
+  driveFiles    WorkspaceUpload[]
+  uploadFolders WorkspaceUploadFolder[]
 
   @@index([ownerId])
   @@index([slug])
@@ -259,6 +260,27 @@ model WorkspaceUploadLink {
   @@map("workspace_upload_links")
 }
 
+/// A flat organizational grouping in the workspace Drive. Deliberately no
+/// self-relation — folders live at workspace root only, one level deep, no
+/// nesting. Deleting a folder never deletes its files: the FK below is
+/// SetNull, so files just fall back to the unsorted root.
+model WorkspaceUploadFolder {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  uploads WorkspaceUpload[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, name])
+  @@map("workspace_upload_folders")
+}
+
 /// A file sitting in the workspace Drive, waiting to be sorted onto a pipeline
 /// item. Assigning MOVES it: this row is deleted and a VideoAsset is created
 /// against the SAME storage key, so sorting never copies bytes.
@@ -269,6 +291,9 @@ model WorkspaceUpload {
 
   linkId String?
   link   WorkspaceUploadLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+
+  folderId String?
+  folder   WorkspaceUploadFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   /// Storage key under the shared `files/` prefix — the same namespace item
   /// assets use, which is what makes assignment a row insert rather than a copy.
@@ -285,6 +310,7 @@ model WorkspaceUpload {
   @@index([workspaceId])
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([linkId])
+  @@index([folderId])
   @@map("workspace_uploads")
 }
 
