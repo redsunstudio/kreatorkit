@@ -3,6 +3,7 @@
 import { memo, type RefObject } from 'react';
 import {
   AlertCircle,
+  Camera,
   Clock,
   Flag,
   Gauge,
@@ -105,6 +106,9 @@ interface PlayerCoreProps {
   reviewMarkers: ReviewMarker[];
   canAddReviewMarker: boolean;
   onAddReviewMarker: () => void;
+  canCaptureFrame: boolean;
+  isCapturingFrame: boolean;
+  onCaptureFrame: () => void;
 }
 
 export const PlayerCore = memo(function PlayerCore({
@@ -168,6 +172,9 @@ export const PlayerCore = memo(function PlayerCore({
   reviewMarkers,
   canAddReviewMarker,
   onAddReviewMarker,
+  canCaptureFrame,
+  isCapturingFrame,
+  onCaptureFrame,
 }: PlayerCoreProps) {
   return (
     <>
@@ -212,6 +219,7 @@ export const PlayerCore = memo(function PlayerCore({
                   }}
                   preload="metadata"
                   playsInline
+                  crossOrigin="anonymous"
                 />
               </div>
             </div>
@@ -413,6 +421,23 @@ export const PlayerCore = memo(function PlayerCore({
                 Frame {frameStepLabel}
               </Button>
 
+              {canCaptureFrame && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onCaptureFrame}
+                  disabled={isCapturingFrame}
+                  title="Save current frame as image"
+                >
+                  {isCapturingFrame ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
+
               {activeProviderId === 'bunny' && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -480,6 +505,12 @@ export const PlayerCore = memo(function PlayerCore({
                 <DropdownMenuItem onClick={handleFrameModeToggle}>
                   Frame step ({frameStepLabel}) {isFrameMode ? '— on' : ''}
                 </DropdownMenuItem>
+                {canCaptureFrame && (
+                  <DropdownMenuItem onClick={onCaptureFrame} disabled={isCapturingFrame}>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Save current frame
+                  </DropdownMenuItem>
+                )}
                 {activeProviderId === 'bunny' && (
                   <>
                     <DropdownMenuSeparator />

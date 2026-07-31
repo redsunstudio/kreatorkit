@@ -22,6 +22,7 @@ import { useCommentActions } from '@/components/video-page/hooks/use-comment-act
 import { useVideoPageData } from '@/components/video-page/hooks/use-video-page-data';
 import { useCommentExport } from '@/components/video-page/hooks/use-comment-export';
 import { useDownloadActions } from '@/components/video-page/hooks/use-download-actions';
+import { useFrameCapture } from '@/components/video-page/hooks/use-frame-capture';
 import { useVersionDurationSync } from '@/components/video-page/hooks/use-version-duration-sync';
 import { CommentComposer } from '@/components/video-page/comment-composer';
 import { CommentsPane } from '@/components/video-page/comments-pane';
@@ -412,6 +413,13 @@ export function VideoPageContent({
   const { activeDownloadTarget, isDownloadingVideo, startDownload } = useDownloadActions({
     activeVersion,
     video,
+  });
+
+  const { canCaptureFrame, isCapturingFrame, captureFrame } = useFrameCapture({
+    videoRef,
+    activeProviderId,
+    videoTitle: video?.title ?? '',
+    currentTime,
   });
 
   // Memoize comments array
@@ -926,6 +934,9 @@ export function VideoPageContent({
             reviewMarkers={reviewMarkers}
             canAddReviewMarker={canManageReviewMarkers}
             onAddReviewMarker={handleOpenMarkerDialog}
+            canCaptureFrame={canCaptureFrame}
+            isCapturingFrame={isCapturingFrame}
+            onCaptureFrame={captureFrame}
           />
 
           <ReviewMarkersStrip
