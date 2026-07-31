@@ -17,6 +17,8 @@ const MAX_STROKES = 500;
 const MAX_POINTS_PER_STROKE = 2000;
 const MIN_STROKE_WIDTH = 1;
 const MAX_STROKE_WIDTH = 20;
+const VALID_STROKE_TYPES = new Set(['freehand', 'arrow', 'rect']);
+type AnnotationStrokeType = 'freehand' | 'arrow' | 'rect';
 
 /**
  * Validates and returns a safe copy of annotation stroke data.
@@ -25,24 +27,48 @@ const MAX_STROKE_WIDTH = 20;
  * by AnnotationCanvas. Rejects anything that could trigger prototype pollution
  * or carry unexpected properties into the renderer.
  *
+ * `type` is optional — every row persisted before shape tools shipped has no
+ * `type` key at all, and that must keep meaning "freehand" forever. An
+ * unrecognized `type` value is rejected outright (not coerced to freehand),
+ * matching this validator's existing reject-don't-coerce philosophy.
+ *
  * Returns null when the input is absent or structurally invalid.
  */
-export function validateAnnotationStrokes(
-  data: unknown
-): { points: { x: number; y: number }[]; color: string; width: number }[] | null {
+export function validateAnnotationStrokes(data: unknown):
+  | {
+      type?: AnnotationStrokeType;
+      points: { x: number; y: number }[];
+      color: string;
+      width: number;
+    }[]
+  | null {
   if (data === null || data === undefined) return null;
   if (!Array.isArray(data)) return null;
   if (data.length > MAX_STROKES) return null;
 
-  const result: { points: { x: number; y: number }[]; color: string; width: number }[] = [];
+  const result: {
+    type?: AnnotationStrokeType;
+    points: { x: number; y: number }[];
+    color: string;
+    width: number;
+  }[] = [];
 
   for (const stroke of data) {
     if (stroke === null || typeof stroke !== 'object' || Array.isArray(stroke)) return null;
 
-    const { points, color, width } = stroke as Record<string, unknown>;
+    const { points, color, width, type } = stroke as Record<string, unknown>;
+
+    let safeType: AnnotationStrokeType | undefined;
+    if (type !== undefined) {
+      if (typeof type !== 'string' || !VALID_STROKE_TYPES.has(type)) return null;
+      safeType = type as AnnotationStrokeType;
+    }
+    const effectiveType: AnnotationStrokeType = safeType ?? 'freehand';
 
     if (!Array.isArray(points)) return null;
     if (points.length > MAX_POINTS_PER_STROKE) return null;
+    // Arrow/rect are always exactly the 2 drag endpoints — anything else is malformed.
+    if (effectiveType !== 'freehand' && points.length !== 2) return null;
 
     const safePoints: { x: number; y: number }[] = [];
     for (const pt of points) {
@@ -57,7 +83,12 @@ export function validateAnnotationStrokes(
     if (typeof width !== 'number' || width < MIN_STROKE_WIDTH || width > MAX_STROKE_WIDTH)
       return null;
 
-    result.push({ points: safePoints, color, width });
+    result.push({
+      ...(safeType !== undefined && { type: safeType }),
+      points: safePoints,
+      color,
+      width,
+    });
   }
 
   return result;

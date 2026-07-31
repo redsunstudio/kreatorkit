@@ -2,9 +2,13 @@
 
 import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
-import { Undo2, Trash2, Minus, Plus, X } from 'lucide-react';
+import { Undo2, Trash2, Minus, Plus, X, Pen, ArrowUpRight, Square } from 'lucide-react';
+
+export type AnnotationTool = 'freehand' | 'arrow' | 'rect';
 
 export interface AnnotationStroke {
+  /** Absent on every row persisted before shape tools shipped — always means 'freehand'. */
+  type?: AnnotationTool;
   points: { x: number; y: number }[];
   color: string;
   width: number;
@@ -42,6 +46,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     const [currentStroke, setCurrentStroke] = useState<AnnotationStroke | null>(null);
     const [color, setColor] = useState(DEFAULT_COLOR);
     const [width, setWidth] = useState(DEFAULT_WIDTH);
+    const [tool, setTool] = useState<AnnotationTool>('freehand');
     const isDrawingRef = useRef(false);
     void onConfirm;
 
@@ -67,16 +72,59 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
         const scale = canvas.width / REF_WIDTH;
 
         const draw = (s: AnnotationStroke) => {
-          if (s.points.length < 2) return;
+          const kind: AnnotationTool = s.type ?? 'freehand';
           ctx.strokeStyle = s.color;
           ctx.lineWidth = s.width * scale;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          ctx.beginPath();
-          ctx.moveTo(s.points[0].x * canvas.width, s.points[0].y * canvas.height);
-          for (let i = 1; i < s.points.length; i++) {
-            ctx.lineTo(s.points[i].x * canvas.width, s.points[i].y * canvas.height);
+
+          if (kind === 'freehand') {
+            if (s.points.length < 2) return;
+            ctx.beginPath();
+            ctx.moveTo(s.points[0].x * canvas.width, s.points[0].y * canvas.height);
+            for (let i = 1; i < s.points.length; i++) {
+              ctx.lineTo(s.points[i].x * canvas.width, s.points[i].y * canvas.height);
+            }
+            ctx.stroke();
+            return;
           }
+
+          if (s.points.length !== 2) return; // arrow/rect are always exactly 2 points
+          const x0 = s.points[0].x * canvas.width;
+          const y0 = s.points[0].y * canvas.height;
+          const x1 = s.points[1].x * canvas.width;
+          const y1 = s.points[1].y * canvas.height;
+
+          if (kind === 'rect') {
+            ctx.strokeRect(
+              Math.min(x0, x1),
+              Math.min(y0, y1),
+              Math.abs(x1 - x0),
+              Math.abs(y1 - y0)
+            );
+            return;
+          }
+
+          // Arrow: shaft + a two-line arrowhead angled off the shaft's direction.
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.stroke();
+
+          const angle = Math.atan2(y1 - y0, x1 - x0);
+          const headLen = Math.max(10, s.width * scale * 4);
+          const headAngle = Math.PI / 7; // ~25.7°
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(
+            x1 - headLen * Math.cos(angle - headAngle),
+            y1 - headLen * Math.sin(angle - headAngle)
+          );
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(
+            x1 - headLen * Math.cos(angle + headAngle),
+            y1 - headLen * Math.sin(angle + headAngle)
+          );
           ctx.stroke();
         };
 
@@ -153,9 +201,17 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
         const pt = getPoint(e);
         if (!pt) return;
         isDrawingRef.current = true;
-        setCurrentStroke({ points: [pt], color, width });
+        setCurrentStroke({
+          type: tool,
+          // Arrow/rect seed both endpoints at the down-point; move only ever
+          // replaces the second one, so it's a live-updating 2-point shape
+          // rather than an accumulating polyline.
+          points: tool === 'freehand' ? [pt] : [pt, pt],
+          color,
+          width,
+        });
       },
-      [mode, color, width, getPoint]
+      [mode, color, width, tool, getPoint]
     );
 
     const handlePointerMove = useCallback(
@@ -167,7 +223,10 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
         if (!pt) return;
         setCurrentStroke((prev) => {
           if (!prev) return prev;
-          return { ...prev, points: [...prev.points, pt] };
+          if ((prev.type ?? 'freehand') === 'freehand') {
+            return { ...prev, points: [...prev.points, pt] };
+          }
+          return { ...prev, points: [prev.points[0], pt] };
         });
       },
       [mode, getPoint]
@@ -180,8 +239,17 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
         e.stopPropagation();
         isDrawingRef.current = false;
         setCurrentStroke((prev) => {
-          if (prev && prev.points.length >= 2) {
-            setStrokes((s) => [...s, prev]);
+          if (prev) {
+            const kind = prev.type ?? 'freehand';
+            if (kind === 'freehand') {
+              if (prev.points.length >= 2) setStrokes((s) => [...s, prev]);
+            } else {
+              const [p0, p1] = prev.points;
+              // Reject a plain click with no drag — an invisible zero-length
+              // shape would still count toward MAX_STROKES and clutter Undo.
+              const isDegenerate = p0.x === p1.x && p0.y === p1.y;
+              if (!isDegenerate) setStrokes((s) => [...s, prev]);
+            }
           }
           return null;
         });
@@ -241,6 +309,39 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
 
         {/* Toolbar */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center justify-center flex-wrap gap-x-2 gap-y-2 w-[calc(100%-24px)] max-w-fit bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg border z-[70]">
+          {/* Tool */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant={tool === 'freehand' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setTool('freehand')}
+              title="Pen"
+            >
+              <Pen className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={tool === 'arrow' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setTool('arrow')}
+              title="Arrow"
+            >
+              <ArrowUpRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={tool === 'rect' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setTool('rect')}
+              title="Rectangle"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="hidden sm:block w-px h-6 bg-border mx-1" />
+
           {/* Colors */}
           <div className="flex items-center justify-center flex-wrap gap-1.5">
             {COLORS.map((c) => (
