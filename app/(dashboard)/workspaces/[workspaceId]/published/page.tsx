@@ -8,6 +8,7 @@ import { isPublishDataStale, syncPublishedVideos } from '@/lib/publish-sync';
 import { typeMeta } from '@/lib/video-type';
 import { ModuleNav } from '@/components/workspace/module-nav';
 import { ThumbnailImage } from '@/components/thumbnail-image';
+import { PublishedStorageActions } from '@/app/(dashboard)/workspaces/[workspaceId]/published/published-storage-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,11 +42,10 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
       where: { status: 'PUBLISHED', project: { workspaceId } },
       orderBy: { updatedAt: 'desc' },
       include: {
-        versions: {
-          where: { isActive: true },
-          take: 1,
-          select: { thumbnailUrl: true },
-        },
+        // ALL versions (not just active) — storage held by a video is
+        // everything sitting in R2 for it, not just the kept cut.
+        versions: { select: { thumbnailUrl: true, isActive: true, sizeBytes: true } },
+        assets: { select: { sizeBytes: true } },
       },
     });
 
@@ -92,13 +92,17 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
       ) : (
         <div className="rounded-xl border bg-card divide-y divide-border overflow-hidden">
           {videos.map((v) => {
+            const activeVersion = v.versions.find((ver) => ver.isActive) ?? v.versions[0];
             const thumb = v.thumbnailUrl
               ? v.thumbnailUrl.includes('?')
                 ? v.thumbnailUrl
                 : `${v.thumbnailUrl}?inline=1`
-              : (v.versions[0]?.thumbnailUrl ?? null);
+              : (activeVersion?.thumbnailUrl ?? null);
             const stats = (v.publishStats ?? {}) as Record<string, number>;
             const t = typeMeta(v.videoType);
+            const totalBytes =
+              v.versions.reduce((sum, ver) => sum + ver.sizeBytes, BigInt(0)) +
+              v.assets.reduce((sum, asset) => sum + asset.sizeBytes, BigInt(0));
             return (
               <div
                 key={v.id}
@@ -165,6 +169,13 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
                     </span>
                   )}
                 </div>
+                <PublishedStorageActions
+                  projectId={v.projectId}
+                  videoId={v.id}
+                  totalBytes={totalBytes.toString()}
+                  storageClearedAt={v.storageClearedAt ? v.storageClearedAt.toISOString() : null}
+                  canManage={access.canEdit}
+                />
               </div>
             );
           })}
