@@ -6,52 +6,13 @@ import { logError } from '@/lib/logger';
 import {
   DRIVE_LINK_DEFAULT_TTL_DAYS,
   DRIVE_LINK_LABEL_MAX,
+  driveLinkDTO,
   newUploadToken,
+  resolveLinkBaseUrl,
 } from '@/lib/workspace-drive';
 import { resolveDriveAccess } from '@/lib/workspace-drive-server';
 
 type RouteParams = { params: Promise<{ workspaceId: string }> };
-
-/**
- * Same precedence the share-link route uses: the operator-configured app URL
- * wins, because a grab link is pasted into an email and must survive whatever
- * host the request happened to arrive on.
- */
-function resolveLinkBaseUrl(request: NextRequest): string {
-  for (const configured of [process.env.NEXT_PUBLIC_APP_URL, process.env.NEXTAUTH_URL]) {
-    if (!configured?.trim()) continue;
-    try {
-      return new URL(/^https?:\/\//i.test(configured) ? configured : `https://${configured}`)
-        .origin;
-    } catch {
-      // fall through to the request origin
-    }
-  }
-  return request.nextUrl.origin;
-}
-
-function linkDTO(
-  l: {
-    id: string;
-    token: string;
-    label: string | null;
-    expiresAt: Date | null;
-    revokedAt: Date | null;
-    createdAt: Date;
-    _count?: { uploads: number };
-  },
-  baseUrl: string
-) {
-  return {
-    id: l.id,
-    label: l.label,
-    url: `${baseUrl}/u/${l.token}`,
-    expiresAt: l.expiresAt?.toISOString() ?? null,
-    revokedAt: l.revokedAt?.toISOString() ?? null,
-    createdAt: l.createdAt.toISOString(),
-    uploadCount: l._count?.uploads ?? 0,
-  };
-}
 
 // GET /api/workspaces/[id]/drive/links
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -68,9 +29,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       include: { _count: { select: { uploads: true } } },
     });
 
-    const baseUrl = resolveLinkBaseUrl(request);
+    const baseUrl = resolveLinkBaseUrl(request.nextUrl.origin);
     return withCacheControl(
-      successResponse({ links: links.map((l) => linkDTO(l, baseUrl)) }),
+      successResponse({ links: links.map((l) => driveLinkDTO(l, baseUrl)) }),
       'private, no-store'
     );
   } catch (error) {
@@ -119,7 +80,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     return withCacheControl(
-      successResponse({ link: linkDTO(created, resolveLinkBaseUrl(request)) }, 201),
+      successResponse(
+        { link: driveLinkDTO(created, resolveLinkBaseUrl(request.nextUrl.origin)) },
+        201
+      ),
       'private, no-store'
     );
   } catch (error) {

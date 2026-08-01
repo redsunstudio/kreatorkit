@@ -7,9 +7,11 @@ import {
   Check,
   Copy,
   Folder,
+  FolderInput,
   FolderPlus,
   Link2,
   Loader2,
+  Pencil,
   Trash2,
   Download,
   Plus,
@@ -76,6 +78,10 @@ interface DriveClientProps {
   workspaceId: string;
   isAdmin: boolean;
   items: PipelineItem[];
+  /** Root-level drive contents, server-rendered — first paint needs no client fetch. */
+  initialFiles: DriveFile[];
+  initialFolders: DriveFolder[];
+  initialLinks: GrabLink[];
 }
 
 type UploadRow = {
@@ -112,13 +118,20 @@ function DriveCheckbox({
   );
 }
 
-export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
+export function DriveClient({
+  workspaceId,
+  isAdmin,
+  items,
+  initialFiles,
+  initialFolders,
+  initialLinks,
+}: DriveClientProps) {
   const router = useRouter();
-  const [files, setFiles] = useState<DriveFile[]>([]);
-  const [folders, setFolders] = useState<DriveFolder[]>([]);
+  const [files, setFiles] = useState<DriveFile[]>(initialFiles);
+  const [folders, setFolders] = useState<DriveFolder[]>(initialFolders);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [links, setLinks] = useState<GrabLink[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [links, setLinks] = useState<GrabLink[]>(initialLinks);
+  const [loading, setLoading] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkLabel, setLinkLabel] = useState('');
   const [minting, setMinting] = useState(false);
@@ -134,6 +147,18 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
   const [newVideoDialogOpen, setNewVideoDialogOpen] = useState(false);
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [creatingVideo, setCreatingVideo] = useState(false);
+
+  const [renameFolderTarget, setRenameFolderTarget] = useState<DriveFolder | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState('');
+  const [renamingFolder, setRenamingFolder] = useState(false);
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<DriveFolder | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState(false);
+
+  const [bulkMoveDialogOpen, setBulkMoveDialogOpen] = useState(false);
+  const [bulkMoveFolderId, setBulkMoveFolderId] = useState<string>('__root__');
+  const [bulkMoving, setBulkMoving] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -165,7 +190,15 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
     }
   }, [workspaceId, isAdmin, currentFolderId]);
 
+  // Root-level data (currentFolderId === null on mount) already arrived via
+  // SSR props — the first run of this effect is a no-op. Every later run
+  // (folder navigation, or `isAdmin`/`workspaceId` changing) still fetches.
+  const skippedFirstLoad = useRef(false);
   useEffect(() => {
+    if (!skippedFirstLoad.current) {
+      skippedFirstLoad.current = true;
+      return;
+    }
     void load();
   }, [load]);
 
@@ -348,6 +381,133 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
       toast.error(e instanceof Error ? e.message : 'Could not create the folder');
     } finally {
       setCreatingFolder(false);
+    }
+  }
+
+  async function renameFolder() {
+    if (!renameFolderTarget) return;
+    setRenamingFolder(true);
+    try {
+      const res = await fetch(
+        `/api/workspaces/${workspaceId}/drive/folders/${renameFolderTarget.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: renameFolderName.trim() }),
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error?.message || 'Could not rename the folder');
+      const folder: DriveFolder = data.data.folder;
+      setFolders((prev) => prev.map((f) => (f.id === folder.id ? folder : f)));
+      toast.success('Folder renamed');
+      setRenameFolderTarget(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not rename the folder');
+    } finally {
+      setRenamingFolder(false);
+    }
+  }
+
+  async function deleteFolder() {
+    if (!deleteFolderTarget) return;
+    setDeletingFolder(true);
+    try {
+      const res = await fetch(
+        `/api/workspaces/${workspaceId}/drive/folders/${deleteFolderTarget.id}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error();
+      setFolders((prev) => prev.filter((f) => f.id !== deleteFolderTarget.id));
+      // Its files fell back to unsorted (folderId SET NULL) — reload the
+      // current view if that's what's showing, so they reappear.
+      if (currentFolderId === null) void load();
+      toast.success('Folder deleted — its files moved to unsorted');
+      setDeleteFolderTarget(null);
+    } catch {
+      toast.error('Could not delete the folder');
+    } finally {
+      setDeletingFolder(false);
+    }
+  }
+
+  async function moveFile(fileId: string, folderId: string | null) {
+    const file = files.find((f) => f.id === fileId);
+    if (!file) return;
+    setBusyFileId(fileId);
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/drive/${fileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error?.message || 'Could not move the file');
+      // The file only ever belongs to one view at a time (root or a single
+      // folder) — after a move it always leaves whatever list is on screen.
+      setFiles((prev) => prev.filter((f) => f.id !== fileId));
+      setFolders((prev) =>
+        prev.map((fo) => {
+          if (fo.id === file.folderId) return { ...fo, fileCount: Math.max(0, fo.fileCount - 1) };
+          if (fo.id === folderId) return { ...fo, fileCount: fo.fileCount + 1 };
+          return fo;
+        })
+      );
+      toast.success(folderId ? 'Moved into the folder' : 'Moved to unsorted');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not move the file');
+    } finally {
+      setBusyFileId(null);
+    }
+  }
+
+  async function bulkMove() {
+    setBulkMoving(true);
+    const folderId = bulkMoveFolderId === '__root__' ? null : bulkMoveFolderId;
+    const ids = Array.from(selectedFileIds);
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/drive/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'move', fileIds: ids, folderId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error?.message || 'Could not move the files');
+      const moved: number = data.data.moved;
+      setFiles((prev) => prev.filter((f) => !selectedFileIds.has(f.id)));
+      setFolders((prev) =>
+        prev.map((fo) => (fo.id === folderId ? { ...fo, fileCount: fo.fileCount + moved } : fo))
+      );
+      toast.success(`Moved ${moved} file${moved === 1 ? '' : 's'}`);
+      setSelectedFileIds(new Set());
+      setBulkMoveDialogOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not move the files');
+    } finally {
+      setBulkMoving(false);
+    }
+  }
+
+  async function bulkDelete() {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedFileIds);
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/drive/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', fileIds: ids }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error?.message || 'Could not delete the files');
+      const deleted: number = data.data.deleted;
+      setFiles((prev) => prev.filter((f) => !selectedFileIds.has(f.id)));
+      toast.success(`Deleted ${deleted} file${deleted === 1 ? '' : 's'}`);
+      setSelectedFileIds(new Set());
+      setBulkDeleteDialogOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete the files');
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -565,6 +725,23 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
                   {folder.name}
                   <span className="text-xs text-muted-foreground">({folder.fileCount})</span>
                 </button>
+                <button
+                  className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  title="Rename folder"
+                  onClick={() => {
+                    setRenameFolderTarget(folder);
+                    setRenameFolderName(folder.name);
+                  }}
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button
+                  className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-red-400 hover:bg-accent transition-colors"
+                  title="Delete folder"
+                  onClick={() => setDeleteFolderTarget(folder)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
               </div>
             ))}
           </div>
@@ -600,6 +777,26 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
                     {DAY_FMT.format(new Date(f.createdAt))}
                   </p>
                 </div>
+
+                <Select
+                  disabled={busyFileId === f.id}
+                  value={f.folderId ?? '__root__'}
+                  onValueChange={(v) => void moveFile(f.id, v === '__root__' ? null : v)}
+                >
+                  <SelectTrigger className="h-8 w-[150px] text-xs flex-none">
+                    <SelectValue placeholder="Move to folder…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__root__" className="text-xs">
+                      No folder
+                    </SelectItem>
+                    {folders.map((fo) => (
+                      <SelectItem key={fo.id} value={fo.id} className="text-xs">
+                        {fo.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
                 <Select
                   disabled={busyFileId === f.id || items.length === 0}
@@ -649,6 +846,30 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
             <Plus className="h-4 w-4 mr-1.5" />
             New Video
           </Button>
+          {selectedFileIds.size > 0 && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setBulkMoveFolderId('__root__');
+                  setBulkMoveDialogOpen(true);
+                }}
+              >
+                <FolderInput className="h-4 w-4 mr-1.5" />
+                Move
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-400 hover:text-red-400"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete
+              </Button>
+            </>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -764,6 +985,137 @@ export function DriveClient({ workspaceId, isAdmin, items }: DriveClientProps) {
             >
               {creatingVideo ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
               Create video
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!renameFolderTarget}
+        onOpenChange={(open) => !open && setRenameFolderTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename folder</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={renameFolderName}
+            onChange={(e) => setRenameFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void renameFolder();
+            }}
+            maxLength={120}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRenameFolderTarget(null)}
+              disabled={renamingFolder}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void renameFolder()}
+              disabled={renamingFolder || !renameFolderName.trim()}
+            >
+              {renamingFolder ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!deleteFolderTarget}
+        onOpenChange={(open) => !open && setDeleteFolderTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete “{deleteFolderTarget?.name}”?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The folder goes away, but its {deleteFolderTarget?.fileCount ?? 0} file
+            {deleteFolderTarget?.fileCount === 1 ? '' : 's'} aren&rsquo;t deleted — they move back
+            to unsorted.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteFolderTarget(null)}
+              disabled={deletingFolder}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void deleteFolder()}
+              disabled={deletingFolder}
+            >
+              {deletingFolder ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              Delete folder
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkMoveDialogOpen} onOpenChange={setBulkMoveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Move {selectedFileIds.size} file{selectedFileIds.size === 1 ? '' : 's'}
+            </DialogTitle>
+          </DialogHeader>
+          <Select value={bulkMoveFolderId} onValueChange={setBulkMoveFolderId}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__root__">No folder</SelectItem>
+              {folders.map((fo) => (
+                <SelectItem key={fo.id} value={fo.id}>
+                  {fo.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkMoveDialogOpen(false)}
+              disabled={bulkMoving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void bulkMove()} disabled={bulkMoving}>
+              {bulkMoving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedFileIds.size} file{selectedFileIds.size === 1 ? '' : 's'}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This deletes the files themselves, not just their listing — it can&rsquo;t be undone.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkDeleteDialogOpen(false)}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void bulkDelete()} disabled={bulkDeleting}>
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

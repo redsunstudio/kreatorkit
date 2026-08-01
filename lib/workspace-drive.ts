@@ -37,6 +37,59 @@ export function sanitizeDriveFileName(name: string): string {
 
 export const DRIVE_OBJECT_KEY_RE = /^files\/[A-Za-z0-9-]{36}-[A-Za-z0-9._ ()-]{1,160}$/;
 
+/**
+ * Same precedence the share-link route uses: the operator-configured app URL
+ * wins, because a grab link is pasted into an email and must survive whatever
+ * host the request happened to arrive on. `fallbackOrigin` is what to use if
+ * neither env var is configured (an API route passes `request.nextUrl.origin`;
+ * a server page has no request object, so it derives one from `headers()`).
+ */
+export function resolveLinkBaseUrl(fallbackOrigin: string): string {
+  for (const configured of [process.env.NEXT_PUBLIC_APP_URL, process.env.NEXTAUTH_URL]) {
+    if (!configured?.trim()) continue;
+    try {
+      return new URL(/^https?:\/\//i.test(configured) ? configured : `https://${configured}`)
+        .origin;
+    } catch {
+      // fall through to the caller-supplied origin
+    }
+  }
+  return fallbackOrigin;
+}
+
+export interface DriveLinkDTO {
+  id: string;
+  label: string | null;
+  url: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  uploadCount: number;
+}
+
+export function driveLinkDTO(
+  l: {
+    id: string;
+    token: string;
+    label: string | null;
+    expiresAt: Date | null;
+    revokedAt: Date | null;
+    createdAt: Date;
+    _count?: { uploads: number };
+  },
+  baseUrl: string
+): DriveLinkDTO {
+  return {
+    id: l.id,
+    label: l.label,
+    url: `${baseUrl}/u/${l.token}`,
+    expiresAt: l.expiresAt?.toISOString() ?? null,
+    revokedAt: l.revokedAt?.toISOString() ?? null,
+    createdAt: l.createdAt.toISOString(),
+    uploadCount: l._count?.uploads ?? 0,
+  };
+}
+
 export interface DriveLinkStatus {
   ok: boolean;
   reason?: 'not_found' | 'revoked' | 'expired';
