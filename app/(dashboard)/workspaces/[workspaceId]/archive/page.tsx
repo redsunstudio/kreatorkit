@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, Film, MessageSquare } from 'lucide-react';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { ThumbnailImage } from '@/components/thumbnail-image';
 
@@ -16,28 +16,26 @@ export default async function WorkspaceArchivePage({ params }: ArchivePageProps)
   const { workspaceId } = await params;
   if (!session?.user?.id) redirect('/login');
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { id: true, name: true, ownerId: true, brandAccent: true },
-  });
-  if (!workspace) notFound();
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
-  if (!access.hasAccess) redirect('/dashboard');
-
-  const archived = await db.video.findMany({
-    where: { project: { workspaceId }, status: 'ARCHIVED' },
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      versions: {
-        where: { isActive: true },
-        take: 1,
-        select: { versionNumber: true, _count: { select: { comments: true } } },
+  const [{ workspace: accessWorkspace, access }, workspace, archived] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
+    db.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, name: true, ownerId: true, brandAccent: true },
+    }),
+    db.video.findMany({
+      where: { project: { workspaceId }, status: 'ARCHIVED' },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        versions: {
+          where: { isActive: true },
+          take: 1,
+          select: { versionNumber: true, _count: { select: { comments: true } } },
+        },
       },
-    },
-  });
+    }),
+  ]);
+  if (!workspace || !accessWorkspace || !access) notFound();
+  if (!access.hasAccess) redirect('/dashboard');
 
   return (
     <div

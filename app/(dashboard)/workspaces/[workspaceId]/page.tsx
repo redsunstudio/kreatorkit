@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, Settings, FolderOpen, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { VideoDragDropUploader } from '@/components/video-drag-drop-uploader';
 import { isDirectFileUploadEnabled, isS3VideoUploadsEnabled } from '@/lib/feature-flags';
@@ -39,7 +39,8 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     status: { notIn: ['ARCHIVED' as const, 'PUBLISHED' as const] },
   };
 
-  const [workspace, activeVideos, archivedCount, latestCutRows] = await Promise.all([
+  const [{ access }, workspace, activeVideos, archivedCount, latestCutRows] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
     db.workspace.findUnique({
       where: { id: workspaceId },
       include: {
@@ -86,7 +87,7 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     }),
   ]);
 
-  if (!workspace) {
+  if (!workspace || !access) {
     notFound();
   }
 
@@ -94,10 +95,6 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
   const membership = workspace.members[0];
   const isMember = !!membership;
   const isAdmin = isOwner || membership?.role === 'ADMIN';
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
 
   if (!access.hasAccess || (!isOwner && !isMember)) {
     redirect('/dashboard');

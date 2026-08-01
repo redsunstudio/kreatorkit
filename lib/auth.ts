@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
@@ -417,24 +418,27 @@ export async function checkWorkspaceAccess(
 ) {
   const isOwner = userId === workspace.ownerId;
 
-  // Get workspace membership
-  const workspaceMember = userId
-    ? await db.workspaceMember.findUnique({
-        where: { workspaceId_userId: { workspaceId: workspace.id, userId } },
-      })
-    : null;
+  // Membership lookup and owner-billing lookup don't depend on each other —
+  // firing them together instead of sequentially halves this function's
+  // round-trip cost.
+  const [workspaceMember, owner] = await Promise.all([
+    userId
+      ? db.workspaceMember.findUnique({
+          where: { workspaceId_userId: { workspaceId: workspace.id, userId } },
+        })
+      : Promise.resolve(null),
+    db.user.findUnique({
+      where: { id: workspace.ownerId },
+      select: {
+        subscriptionStatus: true,
+        trialEndsAt: true,
+        stripeCurrentPeriodEnd: true,
+        billingAccessEndedAt: true,
+      },
+    }),
+  ]);
   const isMember = !!workspaceMember;
   const isAdmin = workspaceMember?.role === WorkspaceMemberRole.ADMIN;
-
-  const owner = await db.user.findUnique({
-    where: { id: workspace.ownerId },
-    select: {
-      subscriptionStatus: true,
-      trialEndsAt: true,
-      stripeCurrentPeriodEnd: true,
-      billingAccessEndedAt: true,
-    },
-  });
   const ownerBillingActive = owner ? hasBillingAccess(owner) : false;
 
   const hasAccess = ownerBillingActive && (isOwner || isMember);
@@ -451,3 +455,51 @@ export async function checkWorkspaceAccess(
     ownerBillingActive,
   };
 }
+
+export type WorkspaceAccess = Awaited<ReturnType<typeof checkWorkspaceAccess>>;
+
+/**
+ * Workspace lookup + membership + owner-billing fields in ONE query
+ * (Prisma nested `select` instead of the 3 round trips a
+ * `workspace.findUnique` + `checkWorkspaceAccess` call site used to cost).
+ * `cache()`-wrapped so multiple callers in the same request/render (a page
+ * plus anything it renders) share one fetch instead of re-querying — this is
+ * per-request memoization only, safe for per-user access data; it must never
+ * be swapped for `unstable_cache`, which persists across requests/users.
+ */
+export const getWorkspaceAccess = cache(async function getWorkspaceAccess(
+  workspaceId: string,
+  userId: string | undefined
+): Promise<{ workspace: { id: string; ownerId: string } | null; access: WorkspaceAccess | null }> {
+  const workspace = await db.workspace.findUnique({
+    where: { id: workspaceId },
+    select: {
+      id: true,
+      ownerId: true,
+      members: userId ? { where: { userId }, select: { role: true } } : false,
+      owner: {
+        select: {
+          subscriptionStatus: true,
+          trialEndsAt: true,
+          stripeCurrentPeriodEnd: true,
+          billingAccessEndedAt: true,
+        },
+      },
+    },
+  });
+  if (!workspace) return { workspace: null, access: null };
+
+  const membership = userId ? workspace.members?.[0] : undefined;
+  const isOwner = userId === workspace.ownerId;
+  const isMember = !!membership;
+  const isAdmin = membership?.role === WorkspaceMemberRole.ADMIN;
+  const ownerBillingActive = hasBillingAccess(workspace.owner);
+  const hasAccess = ownerBillingActive && (isOwner || isMember);
+  const canEdit = ownerBillingActive && (isOwner || isAdmin);
+  const canDelete = ownerBillingActive && isOwner;
+
+  return {
+    workspace: { id: workspace.id, ownerId: workspace.ownerId },
+    access: { isOwner, isMember, isAdmin, hasAccess, canEdit, canDelete, ownerBillingActive },
+  };
+});

@@ -1,5 +1,6 @@
+import { cache } from 'react';
 import { notFound, redirect } from 'next/navigation';
-import { auth, checkProjectAccess, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, checkProjectAccess, getWorkspaceAccess } from '@/lib/auth';
 import { buildBillingAccessWhereInput, hasBillingAccess } from '@/lib/billing';
 import { db } from '@/lib/db';
 
@@ -121,7 +122,7 @@ export async function hasCollaboratorBillingBackedAccess(userId: string) {
   return workspaceCount > 0 || projectCount > 0;
 }
 
-export async function hasAppNavigationAccess(userId: string) {
+export const hasAppNavigationAccess = cache(async function hasAppNavigationAccess(userId: string) {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
@@ -137,7 +138,7 @@ export async function hasAppNavigationAccess(userId: string) {
   }
 
   return hasCollaboratorBillingBackedAccess(userId);
-}
+});
 
 export async function requireWorkspaceAccessOrRedirect(options: {
   workspaceId: string;
@@ -151,16 +152,11 @@ export async function requireWorkspaceAccessOrRedirect(options: {
     redirectForMissingAuth();
   }
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { id: true, ownerId: true },
-  });
+  const { workspace, access } = await getWorkspaceAccess(workspaceId, resolvedUserId);
 
-  if (!workspace) {
+  if (!workspace || !access) {
     notFound();
   }
-
-  const access = await checkWorkspaceAccess(workspace, resolvedUserId);
 
   if (!access.hasAccess) {
     if (!access.ownerBillingActive) {

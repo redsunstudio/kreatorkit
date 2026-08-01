@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, ExternalLink, Eye, MessageSquare, ThumbsUp } from 'lucide-react';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
 import { isPublishDataStale, syncPublishedVideos } from '@/lib/publish-sync';
@@ -9,8 +9,6 @@ import { typeMeta } from '@/lib/video-type';
 import { ModuleNav } from '@/components/workspace/module-nav';
 import { ThumbnailImage } from '@/components/thumbnail-image';
 import { PublishedStorageActions } from '@/app/(dashboard)/workspaces/[workspaceId]/published/published-storage-actions';
-
-export const dynamic = 'force-dynamic';
 
 interface PublishedPageProps {
   params: Promise<{ workspaceId: string }>;
@@ -27,16 +25,6 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
   const { workspaceId } = await params;
   if (!session?.user?.id) redirect('/login');
 
-  const workspace = await db.workspace.findUnique({ where: { id: workspaceId } });
-  if (!workspace) notFound();
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
-  if (!access.hasAccess || !hasModule(workspace, 'published')) {
-    redirect(`/workspaces/${workspaceId}`);
-  }
-
   const load = () =>
     db.video.findMany({
       where: { status: 'PUBLISHED', project: { workspaceId } },
@@ -49,7 +37,17 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
       },
     });
 
-  let videos = await load();
+  const [{ workspace: accessWorkspace, access }, workspace, initialVideos] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
+    db.workspace.findUnique({ where: { id: workspaceId } }),
+    load(),
+  ]);
+  if (!workspace || !accessWorkspace || !access) notFound();
+  if (!access.hasAccess || !hasModule(workspace, 'published')) {
+    redirect(`/workspaces/${workspaceId}`);
+  }
+
+  let videos = initialVideos;
 
   // The ~24h sync, done lazily: refresh URL + analytics when anything is stale.
   if (videos.some((v) => isPublishDataStale(v))) {

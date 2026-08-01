@@ -1,14 +1,12 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
 import { ModuleNav } from '@/components/workspace/module-nav';
 import { StrategyEditor } from '@/components/workspace/strategy-editor';
 import { parseStrategy } from '@/lib/strategy';
-
-export const dynamic = 'force-dynamic';
 
 interface StrategyPageProps {
   params: Promise<{ workspaceId: string }>;
@@ -22,36 +20,34 @@ export default async function StrategyPage({ params }: StrategyPageProps) {
     redirect('/login');
   }
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    select: {
-      id: true,
-      name: true,
-      ownerId: true,
-      features: true,
-      brandAccent: true,
-      strategy: true,
-    },
-  });
-  if (!workspace) notFound();
+  const [{ workspace: accessWorkspace, access }, workspace, pillarGroups] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
+    db.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        id: true,
+        name: true,
+        ownerId: true,
+        features: true,
+        brandAccent: true,
+        strategy: true,
+      },
+    }),
+    // Strategy feedback loop: videos produced per content pillar.
+    db.video.groupBy({
+      by: ['pillarId'],
+      where: { project: { workspaceId }, pillarId: { not: null } },
+      _count: { _all: true },
+    }),
+  ]);
+  if (!workspace || !accessWorkspace || !access) notFound();
 
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
   if (!access.hasAccess || !hasModule(workspace, 'strategy')) {
     redirect(`/workspaces/${workspaceId}`);
   }
 
   const canEdit = access.isOwner || access.isMember;
   const strategy = parseStrategy(workspace.strategy);
-
-  // Strategy feedback loop: videos produced per content pillar.
-  const pillarGroups = await db.video.groupBy({
-    by: ['pillarId'],
-    where: { project: { workspaceId }, pillarId: { not: null } },
-    _count: { _all: true },
-  });
   const pillarCounts: Record<string, number> = {};
   for (const g of pillarGroups) if (g.pillarId) pillarCounts[g.pillarId] = g._count._all;
 

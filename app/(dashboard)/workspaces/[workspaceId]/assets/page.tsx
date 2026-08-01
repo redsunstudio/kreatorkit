@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
 import { ModuleNav } from '@/components/workspace/module-nav';
@@ -16,12 +16,11 @@ export default async function WorkspaceAssetsPage({ params }: AssetsPageProps) {
   const { workspaceId } = await params;
   if (!session?.user?.id) redirect('/login');
 
-  const workspace = await db.workspace.findUnique({ where: { id: workspaceId } });
-  if (!workspace) notFound();
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
+  const [{ workspace: accessWorkspace, access }, workspace] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
+    db.workspace.findUnique({ where: { id: workspaceId } }),
+  ]);
+  if (!workspace || !accessWorkspace || !access) notFound();
   if (!access.hasAccess || !hasModule(workspace, 'assets')) {
     redirect(`/workspaces/${workspaceId}`);
   }

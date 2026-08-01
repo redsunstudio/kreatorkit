@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, Inbox } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
 import { ModuleNav } from '@/components/workspace/module-nav';
@@ -19,16 +19,11 @@ export default async function HandoffPage({ params }: HandoffPageProps) {
     redirect('/login');
   }
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    include: { members: { where: { userId: session.user.id }, select: { role: true } } },
-  });
-  if (!workspace) notFound();
-
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
+  const [{ workspace: accessWorkspace, access }, workspace] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
+    db.workspace.findUnique({ where: { id: workspaceId } }),
+  ]);
+  if (!workspace || !accessWorkspace || !access) notFound();
   if (!access.hasAccess || !hasModule(workspace, 'handoff')) {
     redirect(`/workspaces/${workspaceId}`);
   }
