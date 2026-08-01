@@ -364,6 +364,54 @@ export function PipelineBoard({
     }
   }
 
+  // Shared by both the board card and the list row's always-visible column —
+  // one visual source of truth for "what cut/idea state is this at."
+  function VersionMarker({ v }: { v: PipelineVideo }) {
+    return (
+      <span
+        className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono"
+        title={
+          v.currentVersion > 0 && v.latestCutAt
+            ? `Latest cut (v${v.currentVersion}) uploaded ${formatCutDateFull(v.latestCutAt)}`
+            : undefined
+        }
+      >
+        {v.currentVersion > 0 ? (
+          <>
+            <Film className="h-3 w-3" />v{v.currentVersion}
+            {v.latestCutAt && (
+              <span className="text-muted-foreground/70">· {formatCutDate(v.latestCutAt)}</span>
+            )}
+          </>
+        ) : (
+          <>
+            <Lightbulb className="h-3 w-3" />
+            idea
+          </>
+        )}
+      </span>
+    );
+  }
+
+  const PACKAGING_WARNING_TITLE =
+    'Title, thumbnail and description are not signed off - this cannot be approved';
+
+  function packagingIncomplete(v: PipelineVideo): boolean {
+    return v.packagingDone === false && stageOf(v.status) !== 'IDEA';
+  }
+
+  // List view's fixed-width warning column shows the icon alone (with the
+  // same tooltip) — the "pkg" text label stays board-only, where there's
+  // room for it without breaking column alignment.
+  function PackagingWarningIcon({ v }: { v: PipelineVideo }) {
+    if (!packagingIncomplete(v)) return null;
+    return (
+      <span title={PACKAGING_WARNING_TITLE}>
+        <PackageOpen className="h-3.5 w-3.5 text-orange-300" />
+      </span>
+    );
+  }
+
   function rowMeta(v: PipelineVideo) {
     const t = typeMeta(v.videoType);
     return (
@@ -374,32 +422,11 @@ export function PipelineBoard({
         >
           {t.emoji} {typeOptionLabel(t)}
         </span>
-        <span
-          className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono"
-          title={
-            v.currentVersion > 0 && v.latestCutAt
-              ? `Latest cut (v${v.currentVersion}) uploaded ${formatCutDateFull(v.latestCutAt)}`
-              : undefined
-          }
-        >
-          {v.currentVersion > 0 ? (
-            <>
-              <Film className="h-3 w-3" />v{v.currentVersion}
-              {v.latestCutAt && (
-                <span className="text-muted-foreground/70">· {formatCutDate(v.latestCutAt)}</span>
-              )}
-            </>
-          ) : (
-            <>
-              <Lightbulb className="h-3 w-3" />
-              idea
-            </>
-          )}
-        </span>
-        {v.packagingDone === false && stageOf(v.status) !== 'IDEA' && (
+        <VersionMarker v={v} />
+        {packagingIncomplete(v) && (
           <span
             className="text-xs inline-flex items-center gap-1 font-mono text-orange-300"
-            title="Title, thumbnail and description are not signed off - this cannot be approved"
+            title={PACKAGING_WARNING_TITLE}
           >
             <PackageOpen className="h-3 w-3" />
             pkg
@@ -463,62 +490,92 @@ export function PipelineBoard({
                   Nothing here yet{canEdit ? ' — add the next video idea.' : '.'}
                 </p>
               )}
-              {stageItems.map((v) => (
-                <div
-                  key={v.id}
-                  draggable={canEdit}
-                  onDragStart={(e) => e.dataTransfer.setData('text/kk-video', v.id)}
-                  className={cn(
-                    'flex items-center gap-4 px-4 py-2.5 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
-                    canEdit && 'cursor-grab active:cursor-grabbing'
-                  )}
-                >
-                  <Thumb v={v} size="row" />
-                  <Link
-                    href={itemHref(v)}
-                    className="text-sm font-medium hover:text-primary transition-colors truncate flex-1 min-w-0"
+              {stageItems.map((v) => {
+                const t = typeMeta(v.videoType);
+                return (
+                  <div
+                    key={v.id}
+                    draggable={canEdit}
+                    onDragStart={(e) => e.dataTransfer.setData('text/kk-video', v.id)}
+                    className={cn(
+                      'group grid grid-cols-[64px_minmax(0,1fr)_104px_20px_auto] items-center gap-x-3 px-4 py-2 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
+                      canEdit && 'cursor-grab active:cursor-grabbing'
+                    )}
                   >
-                    {v.title}
-                  </Link>
-                  {v.brief && (
-                    <span className="hidden lg:block text-xs text-muted-foreground truncate max-w-[240px]">
-                      {v.brief}
-                    </span>
-                  )}
-                  {rowMeta(v)}
-                  {reviewHref(v) && (
-                    <>
+                    <Thumb v={v} size="row" />
+                    <div className="min-w-0">
                       <Link
-                        href={reviewHref(v)!}
-                        className="flex-none inline-flex items-center gap-1 h-7 rounded-md border px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        href={itemHref(v)}
+                        className="block text-sm font-medium hover:text-primary transition-colors truncate"
                       >
-                        <Play className="h-3 w-3" />
-                        Review
+                        {v.title}
                       </Link>
-                      <CopyReviewLink v={v} size="row" />
-                    </>
-                  )}
-                  {canEdit ? (
-                    <Select
-                      value={stageOf(v.status)}
-                      onValueChange={(next) => moveStatus(v.id, next)}
+                      {v.brief && (
+                        <p className="hidden lg:block text-xs text-muted-foreground truncate mt-0.5">
+                          {v.brief}
+                        </p>
+                      )}
+                    </div>
+                    <VersionMarker v={v} />
+                    <div className="flex items-center justify-center">
+                      <PackagingWarningIcon v={v} />
+                    </div>
+                    <div
+                      className={cn(
+                        'flex items-center gap-2 justify-self-end transition-opacity',
+                        'pointer-coarse:opacity-100',
+                        'pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100'
+                      )}
                     >
-                      <SelectTrigger className="h-7 w-[124px] text-xs px-2 flex-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PIPELINE_STAGES.map((st) => (
-                          <SelectItem key={st.key} value={st.key} className="text-xs">
-                            {st.emoji} {st.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <StagePill status={v.status} />
-                  )}
-                </div>
-              ))}
+                      <span className="text-xs" title={t.label}>
+                        {t.emoji}
+                      </span>
+                      {v.membersOnly && (
+                        <span title="Members only - publish privately, then switch visibility in YouTube Studio">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                        </span>
+                      )}
+                      {v.commentCount > 0 && (
+                        <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono">
+                          <MessageSquare className="h-3 w-3" />
+                          {v.commentCount}
+                        </span>
+                      )}
+                      {reviewHref(v) && (
+                        <>
+                          <Link
+                            href={reviewHref(v)!}
+                            className="flex-none inline-flex items-center gap-1 h-7 rounded-md border px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                          >
+                            <Play className="h-3 w-3" />
+                            Review
+                          </Link>
+                          <CopyReviewLink v={v} size="row" />
+                        </>
+                      )}
+                      {canEdit ? (
+                        <Select
+                          value={stageOf(v.status)}
+                          onValueChange={(next) => moveStatus(v.id, next)}
+                        >
+                          <SelectTrigger className="h-7 w-[124px] text-xs px-2 flex-none">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PIPELINE_STAGES.map((st) => (
+                              <SelectItem key={st.key} value={st.key} className="text-xs">
+                                {st.emoji} {st.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <StagePill status={v.status} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
