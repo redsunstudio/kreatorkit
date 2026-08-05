@@ -88,6 +88,11 @@ interface PlayerCoreProps {
   selectedQualityLevel: number;
   qualityOptions: BunnyQualityOption[];
   handleQualityChange: (level: number) => void;
+  /** Proxy renditions available for a self-hosted cut (empty until one is encoded). */
+  proxyOptions: { height: number; label: string }[];
+  /** Which rendition is playing — null means the untouched master. */
+  selectedProxyHeight: number | null;
+  onProxyQualityChange: (height: number | null) => void;
   playbackSpeed: number;
   speedOptions: number[];
   handleSpeedChange: (speed: number) => void;
@@ -158,6 +163,9 @@ export const PlayerCore = memo(function PlayerCore({
   selectedQualityLevel,
   qualityOptions,
   handleQualityChange,
+  proxyOptions,
+  selectedProxyHeight,
+  onProxyQualityChange,
   playbackSpeed,
   speedOptions,
   handleSpeedChange,
@@ -474,6 +482,39 @@ export const PlayerCore = memo(function PlayerCore({
                 </DropdownMenu>
               )}
 
+              {activeProviderId === 'r2' && proxyOptions.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
+                      Quality{' '}
+                      {selectedProxyHeight
+                        ? proxyOptions.find((o) => o.height === selectedProxyHeight)?.label
+                        : 'Original'}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[140px]">
+                    {proxyOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.height}
+                        onClick={() => onProxyQualityChange(option.height)}
+                        className={cn(
+                          option.height === selectedProxyHeight && 'font-bold text-primary'
+                        )}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => onProxyQualityChange(null)}
+                      className={cn(selectedProxyHeight === null && 'font-bold text-primary')}
+                    >
+                      Original file
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
@@ -540,6 +581,31 @@ export const PlayerCore = memo(function PlayerCore({
                         {option.label}
                       </DropdownMenuItem>
                     ))}
+                  </>
+                )}
+                {activeProviderId === 'r2' && proxyOptions.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Quality
+                    </DropdownMenuLabel>
+                    {proxyOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.height}
+                        onClick={() => onProxyQualityChange(option.height)}
+                        className={cn(
+                          option.height === selectedProxyHeight && 'font-bold text-primary'
+                        )}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuItem
+                      onClick={() => onProxyQualityChange(null)}
+                      className={cn(selectedProxyHeight === null && 'font-bold text-primary')}
+                    >
+                      Original file
+                    </DropdownMenuItem>
                   </>
                 )}
                 <DropdownMenuSeparator />

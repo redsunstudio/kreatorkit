@@ -9,6 +9,10 @@ export interface Version {
   thumbnailUrl: string | null;
   duration: number | null;
   isActive: boolean;
+  /** ISO upload date of this cut — shown in the cut picker so "which is newest" is never a guess. */
+  createdAt?: string | null;
+  /** Ready proxy renditions (4K/1080/720), biggest first. Playback and download qualities. */
+  proxies?: { id: string; height: number }[];
   _count: { comments: number };
 }
 
@@ -211,7 +215,7 @@ export interface VersionActionsConfig {
 export interface VideoPageHeaderActions {
   onVersionSelect: (versionId: string) => void;
   onDeleteCurrentVersionClick: () => void;
-  onDownload: (preference?: BunnyDownloadPreference) => void;
+  onDownload: (preference?: BunnyDownloadPreference, proxyHeight?: number) => void;
   onOpenCompare: () => void;
   onCreateVersion: () => void;
 }

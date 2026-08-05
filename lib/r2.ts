@@ -484,8 +484,87 @@ export async function readVideoObjectBytes(
 }
 
 function assertAllowedObjectKey(key: string): void {
-  if (!key.startsWith(VIDEO_OBJECT_KEY_PREFIX) && !key.startsWith(IMAGE_OBJECT_KEY_PREFIX)) {
+  if (
+    !key.startsWith(VIDEO_OBJECT_KEY_PREFIX) &&
+    !key.startsWith(IMAGE_OBJECT_KEY_PREFIX) &&
+    !key.startsWith(PROXY_OBJECT_KEY_PREFIX)
+  ) {
     throw new Error('Invalid object key');
+  }
+}
+
+/**
+ * Proxy renditions (see lib/video-proxy). Same bucket, own prefix, and their own
+ * presign helpers so a proxy key can never be passed where a master is expected.
+ * The transcode worker is the only writer.
+ */
+export const PROXY_OBJECT_KEY_PREFIX = 'proxies/';
+
+function assertProxyKey(key: string): void {
+  if (!key.startsWith(PROXY_OBJECT_KEY_PREFIX)) {
+    throw new Error('Invalid proxy object key');
+  }
+}
+
+export async function createPresignedProxyPutUrl(
+  key: string,
+  expiresInSeconds: number = 6 * 60 * 60
+): Promise<string> {
+  assertProxyKey(key);
+  // No ContentLength pinned: the worker only knows the encoded size once ffmpeg
+  // has finished, and it streams the result straight up.
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ContentType: 'video/mp4',
+  });
+  return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
+}
+
+/** Playback URL for a proxy — inline, long-lived (review sessions seek for hours). */
+export async function createPresignedProxyInlineGetUrl(
+  key: string,
+  expiresInSeconds: number = 43200
+): Promise<string> {
+  assertProxyKey(key);
+  const command = new GetObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ResponseContentType: 'video/mp4',
+    ResponseContentDisposition: 'inline',
+  });
+  return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
+}
+
+/** Download URL for a proxy — attachment, so the browser saves it under a real name. */
+export async function createPresignedProxyGetUrl(
+  key: string,
+  downloadName: string,
+  expiresInSeconds: number = 3600
+): Promise<string> {
+  assertProxyKey(key);
+  const command = new GetObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ResponseContentDisposition: `attachment; filename="${downloadName.replace(/["\\]/g, '')}"`,
+  });
+  return getSignedUrl(getOrCreateR2PresignClient(), command, { expiresIn: expiresInSeconds });
+}
+
+export async function headProxyObject(key: string): Promise<{ contentLength: bigint } | null> {
+  assertProxyKey(key);
+  try {
+    const result = await r2Client.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
+    const contentLength =
+      typeof result.ContentLength === 'number' && result.ContentLength >= 0
+        ? BigInt(result.ContentLength)
+        : BigInt(0);
+    return { contentLength };
+  } catch (error) {
+    const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata
+      ?.httpStatusCode;
+    if (statusCode === 404) return null;
+    throw error;
   }
 }
 

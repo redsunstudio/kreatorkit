@@ -130,6 +130,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       videoId: result.version.videoId,
     };
 
+    // Read the proxy keys BEFORE the delete cascades their rows away, or the
+    // renditions stay in the bucket forever with nothing pointing at them.
+    const proxyKeys = (
+      await db.videoProxy.findMany({
+        where: { versionId, objectKey: { not: null } },
+        select: { objectKey: true },
+      })
+    )
+      .map((proxy) => proxy.objectKey)
+      .filter((key): key is string => Boolean(key));
+
     await db.$transaction(async (tx) => {
       // Delete the version (cascades to comments).
       await tx.videoVersion.delete({ where: { id: versionId } });
@@ -153,8 +164,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       cleanupBunnyStreamVideosBestEffort([bunnyRef]),
       result.version.providerId === 'r2'
         ? deleteMediaFilesBestEffort(
-            [result.version.originalUrl, result.version.thumbnailUrl].filter((url): url is string =>
-              Boolean(url)
+            [result.version.originalUrl, result.version.thumbnailUrl, ...proxyKeys].filter(
+              (url): url is string => Boolean(url)
             )
           )
         : Promise.resolve({ attempted: 0, failed: 0, failedKeys: [] }),

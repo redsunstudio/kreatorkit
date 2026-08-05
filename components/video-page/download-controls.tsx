@@ -21,7 +21,7 @@ interface DownloadControlsProps {
   videoCanDownload: boolean;
   isDownloading: boolean;
   activeDownloadTarget: DownloadTarget | null;
-  onDownload: (preference?: BunnyDownloadPreference) => void;
+  onDownload: (preference?: BunnyDownloadPreference, proxyHeight?: number) => void;
   compact?: boolean;
 }
 
@@ -30,7 +30,62 @@ interface DownloadMenuItemsProps {
   videoCanDownload: boolean;
   isDownloading: boolean;
   activeDownloadTarget: DownloadTarget | null;
-  onDownload: (preference?: BunnyDownloadPreference) => void;
+  onDownload: (preference?: BunnyDownloadPreference, proxyHeight?: number) => void;
+}
+
+/** "4K proxy" / "1080p proxy" — the label John asked for on every download choice. */
+function proxyLabel(height: number): string {
+  return height >= 2160 ? '4K proxy' : `${height}p proxy`;
+}
+
+/**
+ * Quality choices for a cut we host ourselves: the untouched master first, then
+ * every proxy rendition the transcode worker has finished. Renditions still
+ * encoding simply aren't listed yet.
+ */
+function R2DownloadItems({
+  activeVersion,
+  disabled,
+  isDownloading,
+  onDownload,
+}: {
+  activeVersion: Version;
+  disabled: boolean;
+  isDownloading: boolean;
+  onDownload: (preference?: BunnyDownloadPreference, proxyHeight?: number) => void;
+}) {
+  const proxies = activeVersion.proxies ?? [];
+  return (
+    <>
+      <DropdownMenuItem
+        onSelect={(event) => {
+          event.preventDefault();
+          onDownload(undefined, undefined);
+        }}
+        disabled={disabled}
+      >
+        {isDownloading ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4 mr-2" />
+        )}
+        Original file
+      </DropdownMenuItem>
+      {proxies.map((proxy) => (
+        <DropdownMenuItem
+          key={proxy.id}
+          onSelect={(event) => {
+            event.preventDefault();
+            onDownload(undefined, proxy.height);
+          }}
+          disabled={disabled}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {proxyLabel(proxy.height)}
+        </DropdownMenuItem>
+      ))}
+    </>
+  );
 }
 
 export const DownloadControls = memo(function DownloadControls({
@@ -110,15 +165,16 @@ export const DownloadControls = memo(function DownloadControls({
     );
   }
 
-  if (compact) {
+  if (compact || activeVersion.providerId === 'r2') {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            size="icon"
+            size={compact ? 'icon' : 'sm'}
             className={cn(
-              'h-8 w-8 transition-opacity duration-300',
+              compact && 'h-8 w-8',
+              'transition-opacity duration-300',
               isDownloading && 'opacity-50 pointer-events-none'
             )}
             disabled={!isVideoDownloadAvailable || isDownloading}
@@ -126,25 +182,40 @@ export const DownloadControls = memo(function DownloadControls({
             {isDownloading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Download className="h-4 w-4" />
+              <Download className={cn('h-4 w-4', !compact && 'mr-1')} />
+            )}
+            {!compact && (
+              <>
+                Download
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </>
             )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              onDownload();
-            }}
-            disabled={!isVideoDownloadAvailable || isDownloading}
-          >
-            {isDownloading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Download
-          </DropdownMenuItem>
+          {activeVersion.providerId === 'r2' ? (
+            <R2DownloadItems
+              activeVersion={activeVersion}
+              disabled={!isVideoDownloadAvailable || isDownloading}
+              isDownloading={isDownloading}
+              onDownload={onDownload}
+            />
+          ) : (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                onDownload();
+              }}
+              disabled={!isVideoDownloadAvailable || isDownloading}
+            >
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -218,6 +289,17 @@ export const DownloadMenuItems = memo(function DownloadMenuItems({
           Download Compressed
         </DropdownMenuItem>
       </>
+    );
+  }
+
+  if (activeVersion.providerId === 'r2') {
+    return (
+      <R2DownloadItems
+        activeVersion={activeVersion}
+        disabled={!isVideoDownloadAvailable || isDownloading}
+        isDownloading={isDownloading}
+        onDownload={onDownload}
+      />
     );
   }
 

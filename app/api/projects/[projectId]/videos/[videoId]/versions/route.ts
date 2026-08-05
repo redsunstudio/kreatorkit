@@ -6,6 +6,7 @@ import { toJsonSafe } from '@/lib/json-serialize';
 import { rateLimit } from '@/lib/rate-limit';
 import { notifyProjectOwner } from '@/lib/notifications';
 import { notifyReviewReady } from '@/lib/review-notify';
+import { enqueueProxyJobs } from '@/lib/video-proxy';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { verifyBunnyUploadToken } from '@/lib/bunny-upload-token';
 import { finalizeR2VideoUpload } from '@/lib/r2-video-finalize';
@@ -258,6 +259,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Serializable: two concurrent commits must not both leave isActive=true.
       { isolationLevel: 'Serializable' }
     );
+
+    // Queue the proxy ladder for the new cut (playback + download qualities).
+    void enqueueProxyJobs(version.id, version.providerId);
 
     // Notify project owner (fire-and-forget, skip if they added it themselves)
     if (video.project.ownerId !== session.user.id) {

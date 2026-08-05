@@ -61,7 +61,7 @@ export function useDownloadActions({ activeVersion, video }: UseDownloadActionsP
   const isDownloadingVideo = activeDownloadTarget !== null;
 
   const startDownload = useCallback(
-    async (preference: BunnyDownloadPreference = 'compressed') => {
+    async (preference: BunnyDownloadPreference = 'compressed', proxyHeight?: number) => {
       if (!activeVersion || !video || isDownloadingVideo) return;
       if (!video.canDownload) {
         toast.error('Download is disabled for this shared link');
@@ -105,7 +105,14 @@ export function useDownloadActions({ activeVersion, video }: UseDownloadActionsP
           if (!activeVersion.originalUrl.startsWith('/api/upload/video/')) {
             throw new Error('Direct download URL is not allowed');
           }
-          downloadUrl = activeVersion.originalUrl;
+          // NOT the playback URL: that one redirects to a presigned INLINE object,
+          // so the browser navigated away and played the cut in a tab instead of
+          // saving it (a[download] is ignored cross-origin). The download route
+          // presigns the same bytes with an attachment disposition + file name.
+          // A quality asks for a proxy rendition; no quality means the master.
+          downloadUrl = proxyHeight
+            ? `/api/versions/${activeVersion.id}/download?quality=${proxyHeight}`
+            : `/api/versions/${activeVersion.id}/download`;
         } else {
           downloadUrl = getSafeDirectDownloadUrl(activeVersion.originalUrl);
           if (!downloadUrl) {
@@ -122,7 +129,7 @@ export function useDownloadActions({ activeVersion, video }: UseDownloadActionsP
         const baseName = sanitizeDownloadFileName(`${video.title} ${versionLabel}`) || 'video';
         const a = document.createElement('a');
         a.href = downloadUrl;
-        if (activeVersion.providerId === 'direct' || activeVersion.providerId === 'r2') {
+        if (activeVersion.providerId === 'direct') {
           const ext = activeVersion.originalUrl.split('.').pop()?.toLowerCase() || 'mp4';
           a.download = `${baseName}.${ext}`;
         }

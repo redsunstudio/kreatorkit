@@ -6,9 +6,11 @@ import { validateShareLinkAccess } from '@/lib/share-links';
 import { getShareSessionFromRequest } from '@/lib/share-session';
 import { resolveServerBunnyCdnHostname } from '@/lib/bunny-cdn';
 import { NextRequest } from 'next/server';
-import { DownloadEgressSource } from '@prisma/client';
+import { DownloadEgressSource, VideoProxyStatus } from '@prisma/client';
 import { logError } from '@/lib/logger';
 import { canDownloadProjectMedia } from '@/lib/project-download';
+import { videoProxyPathToObjectKey } from '@/lib/video-upload-validation';
+import { createPresignedProxyGetUrl, createPresignedVideoGetUrl, headVideoObject } from '@/lib/r2';
 
 type RouteParams = { params: Promise<{ versionId: string }> };
 type BunnyDownloadSourcePreference = 'auto' | 'original' | 'compressed';
@@ -243,6 +245,64 @@ function extractHeightFromBunnyMp4Url(url: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function sanitizeDownloadFileName(value: string): string {
+  return value
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** "Cuff tear explainer v3.mp4" — what the client should see in their Downloads folder. */
+function buildVersionDownloadFileName(
+  videoTitle: string,
+  version: { versionNumber: number; versionLabel: string | null },
+  objectKey: string,
+  suffix?: string
+): string {
+  const label = version.versionLabel?.trim() || `v${version.versionNumber}`;
+  const stem =
+    sanitizeDownloadFileName(`${videoTitle} ${label}${suffix ? ` ${suffix}` : ''}`) || 'video';
+  const ext = objectKey.includes('.') ? objectKey.slice(objectKey.lastIndexOf('.') + 1) : 'mp4';
+  return `${stem}.${ext}`;
+}
+
+type EgressVersion = {
+  id: string;
+  video: { id: string; project: { id: string; workspace: { id: string; ownerId: string } } };
+};
+
+async function recordDownloadEgress({
+  version,
+  session,
+  source,
+  quality,
+  estimatedBytes,
+}: {
+  version: EgressVersion;
+  session: { user?: { id?: string | null } | null } | null;
+  source: DownloadEgressSource;
+  quality: number | null;
+  estimatedBytes: bigint;
+}): Promise<void> {
+  try {
+    await db.downloadEgressEvent.create({
+      data: {
+        versionId: version.id,
+        videoId: version.video.id,
+        projectId: version.video.project.id,
+        workspaceId: version.video.project.workspace.id,
+        billedUserId: version.video.project.workspace.ownerId,
+        downloaderUserId: session?.user?.id ?? null,
+        source,
+        quality,
+        estimatedBytes,
+      },
+    });
+  } catch (egressError) {
+    logError('Failed to record download egress event:', egressError);
+  }
+}
+
 // GET /api/versions/[versionId]/download
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -311,8 +371,90 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return apiErrors.forbidden('Access denied');
     }
 
+    // Cuts stored in our own bucket. The playback route hands back an INLINE
+    // presign so <video> can stream it, which is exactly why clicking Download
+    // used to navigate to a page playing the cut instead of saving a file:
+    // `a.download` is ignored cross-origin, the disposition on the object wins.
+    // Here we presign the same object with an ATTACHMENT disposition + a real
+    // file name, so the browser saves it.
+    if (version.providerId === 'r2') {
+      // A quality asks for a proxy rendition; no quality means the master.
+      if (rawQuality !== null) {
+        const proxy = await db.videoProxy.findFirst({
+          where: {
+            versionId: version.id,
+            height: requestedQuality,
+            status: VideoProxyStatus.READY,
+            objectKey: { not: null },
+          },
+          select: { objectKey: true, height: true, sizeBytes: true },
+        });
+        if (!proxy?.objectKey) {
+          return apiErrors.notFound(`${requestedQuality}p proxy`);
+        }
+
+        if (isPrepareOnly) {
+          const response = successResponse({
+            quality: proxy.height,
+            sourceType: 'compressed',
+          });
+          return withCacheControl(response, 'private, no-store');
+        }
+
+        const proxyUrl = await createPresignedProxyGetUrl(
+          proxy.objectKey,
+          buildVersionDownloadFileName(
+            version.video.title,
+            version,
+            proxy.objectKey,
+            `${proxy.height}p`
+          )
+        );
+
+        await recordDownloadEgress({
+          version,
+          session,
+          source: DownloadEgressSource.COMPRESSED,
+          quality: proxy.height,
+          estimatedBytes: proxy.sizeBytes,
+        });
+
+        return Response.redirect(proxyUrl, 302);
+      }
+
+      const key = videoProxyPathToObjectKey(version.originalUrl);
+      if (!key) {
+        return apiErrors.badRequest('This cut has no downloadable file');
+      }
+
+      const head = await headVideoObject(key);
+      if (!head) {
+        return apiErrors.notFound('Download file');
+      }
+
+      if (isPrepareOnly) {
+        const response = successResponse({ quality: null, sourceType: 'original' });
+        return withCacheControl(response, 'private, no-store');
+      }
+
+      const url = await createPresignedVideoGetUrl(
+        key,
+        buildVersionDownloadFileName(version.video.title, version, key)
+      );
+
+      await recordDownloadEgress({
+        version,
+        session,
+        source: DownloadEgressSource.ORIGINAL,
+        quality: null,
+        estimatedBytes: head.contentLength,
+      });
+
+      return Response.redirect(url, 302);
+    }
+
     if (version.providerId !== 'bunny') {
-      return apiErrors.badRequest('Download is currently supported for Bunny versions only');
+      return apiErrors.badRequest('Download is not supported for this cut');
     }
 
     if (sourceParam !== null && sourceParam !== 'original' && sourceParam !== 'compressed') {
@@ -366,26 +508,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       // Best-effort — leave estimatedBytes as 0 if HEAD fails.
     }
 
-    try {
-      await db.downloadEgressEvent.create({
-        data: {
-          versionId: version.id,
-          videoId: version.video.id,
-          projectId: version.video.project.id,
-          workspaceId: version.video.project.workspace.id,
-          billedUserId: version.video.project.workspace.ownerId,
-          downloaderUserId: session?.user?.id ?? null,
-          source:
-            source.sourceType === 'original'
-              ? DownloadEgressSource.ORIGINAL
-              : DownloadEgressSource.COMPRESSED,
-          quality: source.quality,
-          estimatedBytes,
-        },
-      });
-    } catch (egressError) {
-      logError('Failed to record download egress event:', egressError);
-    }
+    await recordDownloadEgress({
+      version,
+      session,
+      source:
+        source.sourceType === 'original'
+          ? DownloadEgressSource.ORIGINAL
+          : DownloadEgressSource.COMPRESSED,
+      quality: source.quality,
+      estimatedBytes,
+    });
 
     return Response.redirect(source.url, 302);
   } catch (error) {

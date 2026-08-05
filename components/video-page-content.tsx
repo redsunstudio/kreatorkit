@@ -15,6 +15,7 @@ import { VideoPageError } from '@/components/video-page/video-page-error';
 import { GuestNameGate } from '@/components/video-page/guest-name-gate';
 import { useCommentMedia } from '@/components/video-page/hooks/use-comment-media';
 import { validateAnnotationStrokes } from '@/lib/validation';
+import { pickPlaybackProxy, proxyQualityLabel } from '@/lib/video-proxy-shared';
 import { useVersionActions } from '@/components/video-page/hooks/use-version-actions';
 import { useWatchProgress } from '@/components/video-page/hooks/use-watch-progress';
 import { useVideoPlayer } from '@/components/video-page/hooks/use-video-player';
@@ -292,6 +293,51 @@ export function VideoPageContent({
   const activeProviderId = activeVersion?.providerId;
   const activeVersionDuration = activeVersion?.duration;
   const bunnyCdnHostname = useMemo(() => resolvePublicBunnyCdnHostname(), []);
+  // Proxy playback: which rendition of this cut is on screen (null = the master).
+  const proxyOptions = useMemo(
+    () =>
+      (activeVersion?.proxies ?? []).map((proxy) => ({
+        height: proxy.height,
+        label: proxyQualityLabel(proxy.height),
+      })),
+    [activeVersion?.proxies]
+  );
+  // A viewer's explicit choice, remembered against the cut it was made on: switch
+  // cut and we go back to the default rung rather than to a quality that may not
+  // exist over there. Derived rather than synced through an effect.
+  const [manualProxy, setManualProxy] = useState<{
+    versionId: string | null;
+    height: number | null;
+  } | null>(null);
+  const selectedProxyHeight =
+    manualProxy && manualProxy.versionId === activeVersionId
+      ? manualProxy.height
+      : (pickPlaybackProxy(proxyOptions)?.height ?? null);
+
+  const handleProxyQualityChange = useCallback(
+    (height: number | null) => {
+      const el = videoRef.current;
+      // Swapping the source reloads the element, so carry the playhead across —
+      // a reviewer changing quality mid-note must not be thrown back to 0:00.
+      if (el) {
+        const resumeAt = el.currentTime;
+        const wasPlaying = !el.paused;
+        const restore = () => {
+          el.removeEventListener('loadedmetadata', restore);
+          try {
+            el.currentTime = resumeAt;
+            if (wasPlaying) void el.play();
+          } catch {
+            // Seeking before the new source is ready is harmless — leave it at 0.
+          }
+        };
+        el.addEventListener('loadedmetadata', restore);
+      }
+      setManualProxy({ versionId: activeVersionId, height });
+    },
+    [videoRef, activeVersionId]
+  );
+
   const embedUrl = useMemo(() => {
     if (!activeVersion) return '';
     if (activeVersion.providerId === 'youtube') {
@@ -305,6 +351,11 @@ export function VideoPageContent({
       return `https://${bunnyCdnHostname}/${activeVersion.videoId}/playlist.m3u8`;
     }
     if (activeVersion.providerId === 'r2') {
+      // Prefer a proxy rendition: streaming a 478MB 4K master to review a cut is
+      // what made playback feel slow and burned the storage egress cap.
+      if (selectedProxyHeight) {
+        return `/api/versions/${activeVersion.id}/proxy/${selectedProxyHeight}`;
+      }
       if (activeVersion.originalUrl.startsWith('/api/upload/video/')) {
         return activeVersion.originalUrl;
       }
@@ -327,7 +378,7 @@ export function VideoPageContent({
     } catch {
       return '';
     }
-  }, [activeVersion, bunnyCdnHostname]);
+  }, [activeVersion, bunnyCdnHostname, selectedProxyHeight]);
 
   const {
     isReady,
@@ -878,6 +929,9 @@ export function VideoPageContent({
             activeProviderId={activeVersion?.providerId}
             embedUrl={embedUrl}
             videoRef={videoRef}
+            proxyOptions={proxyOptions}
+            selectedProxyHeight={selectedProxyHeight}
+            onProxyQualityChange={handleProxyQualityChange}
             iframeRef={iframeRef}
             bunnyViewportRef={bunnyViewportRef}
             timelineRef={timelineRef}

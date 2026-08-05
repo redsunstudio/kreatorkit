@@ -24,6 +24,22 @@
 - Custom SQL managed by Prisma migrations: `prisma/migrations/*/migration.sql`.
 - Shared API response helpers: `lib/api-response.ts`.
 - Auth + access-control helpers: `lib/auth.ts`.
+- Nightly backup cron service: `backup/` (own Railway service, `rootDir: backup/`).
+- Transcode worker: `transcode/` (own Railway service, `rootDir: transcode/`).
+
+## Proxy renditions (transcode worker)
+
+Each self-hosted cut gets 4K/1080/720 proxies. Review playback streams a proxy
+instead of the master, and the download menu offers each ready rung.
+
+- Queue rows: `VideoProxy` (`lib/video-proxy.ts`), created on every cut commit.
+- Worker: `transcode/worker.py` — claims one job, ffmpeg-encodes it, PUTs the
+  result straight to storage. It needs `KK_BASE_URL` + `TRANSCODE_API_KEY`
+  (matching the app's own `TRANSCODE_API_KEY`). Any box with ffmpeg can run it;
+  set `FFMPEG_VIDEO_ARGS` to an NVENC recipe on a GPU machine.
+- Worker API: `POST /api/agent/transcode/claim`, `POST /api/agent/transcode/{id}`.
+- Media bytes must never pass through this app (a piped 500MB cut OOM'd the
+  container in July 2026). Both routes only hand out presigned URLs.
 
 ## Change safety rules
 

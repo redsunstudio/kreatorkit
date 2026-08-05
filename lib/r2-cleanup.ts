@@ -30,6 +30,10 @@ export function mediaUrlToKey(url: string): string | null {
   if (/^files\/[A-Za-z0-9._()-]+$/.test(url)) {
     return url;
   }
+  // Proxy renditions are collected as raw object keys too (proxies/{versionId}/{h}p.mp4).
+  if (/^proxies\/[A-Za-z0-9]+\/\d+p\.mp4$/.test(url)) {
+    return url;
+  }
   if (SAFE_AUDIO_PATH.test(url)) {
     const filename = url.slice(AUDIO_PATH_PREFIX.length);
     return filename ? `voice/${filename}` : null;
@@ -86,7 +90,7 @@ export async function deleteMediaFilesBestEffort(mediaUrls: string[]): Promise<R
  * Collect all media URLs from comments under a given video (all versions).
  */
 export async function collectVideoMediaUrls(videoId: string): Promise<string[]> {
-  const [comments, assets, versions] = await Promise.all([
+  const [comments, assets, versions, proxies] = await Promise.all([
     db.comment.findMany({
       where: {
         OR: [{ voiceUrl: { not: null } }, { imageUrl: { not: null } }],
@@ -105,6 +109,12 @@ export async function collectVideoMediaUrls(videoId: string): Promise<string[]> 
       where: { videoParentId: videoId, providerId: 'r2' },
       select: { originalUrl: true, thumbnailUrl: true },
     }),
+    // Proxies are separate objects: deleting only the master would orphan them
+    // (the same class of bug as the 2026-07-13 asset sweep).
+    db.videoProxy.findMany({
+      where: { version: { videoParentId: videoId }, objectKey: { not: null } },
+      select: { objectKey: true },
+    }),
   ]);
   const urls: string[] = [];
   comments.forEach((c) => {
@@ -119,6 +129,9 @@ export async function collectVideoMediaUrls(videoId: string): Promise<string[]> 
     if (version.originalUrl) urls.push(version.originalUrl);
     if (version.thumbnailUrl) urls.push(version.thumbnailUrl);
   });
+  proxies.forEach((proxy) => {
+    if (proxy.objectKey) urls.push(proxy.objectKey);
+  });
   return urls;
 }
 
@@ -126,7 +139,7 @@ export async function collectVideoMediaUrls(videoId: string): Promise<string[]> 
  * Collect all media URLs from comments under all videos in a project.
  */
 export async function collectProjectMediaUrls(projectId: string): Promise<string[]> {
-  const [comments, assets, versions] = await Promise.all([
+  const [comments, assets, versions, proxies] = await Promise.all([
     db.comment.findMany({
       where: {
         OR: [{ voiceUrl: { not: null } }, { imageUrl: { not: null } }],
@@ -145,6 +158,10 @@ export async function collectProjectMediaUrls(projectId: string): Promise<string
       where: { providerId: 'r2', video: { projectId } },
       select: { originalUrl: true, thumbnailUrl: true },
     }),
+    db.videoProxy.findMany({
+      where: { version: { video: { projectId } }, objectKey: { not: null } },
+      select: { objectKey: true },
+    }),
   ]);
   const urls: string[] = [];
   comments.forEach((c) => {
@@ -158,6 +175,9 @@ export async function collectProjectMediaUrls(projectId: string): Promise<string
     if (version.originalUrl) urls.push(version.originalUrl);
     if (version.thumbnailUrl) urls.push(version.thumbnailUrl);
   });
+  proxies.forEach((proxy) => {
+    if (proxy.objectKey) urls.push(proxy.objectKey);
+  });
   return urls;
 }
 
@@ -165,7 +185,7 @@ export async function collectProjectMediaUrls(projectId: string): Promise<string
  * Collect all media URLs from comments under all projects in a workspace.
  */
 export async function collectWorkspaceMediaUrls(workspaceId: string): Promise<string[]> {
-  const [comments, assets, versions] = await Promise.all([
+  const [comments, assets, versions, proxies] = await Promise.all([
     db.comment.findMany({
       where: {
         OR: [{ voiceUrl: { not: null } }, { imageUrl: { not: null } }],
@@ -184,6 +204,10 @@ export async function collectWorkspaceMediaUrls(workspaceId: string): Promise<st
       where: { providerId: 'r2', video: { project: { workspaceId } } },
       select: { originalUrl: true, thumbnailUrl: true },
     }),
+    db.videoProxy.findMany({
+      where: { version: { video: { project: { workspaceId } } }, objectKey: { not: null } },
+      select: { objectKey: true },
+    }),
   ]);
   const urls: string[] = [];
   comments.forEach((c) => {
@@ -196,6 +220,9 @@ export async function collectWorkspaceMediaUrls(workspaceId: string): Promise<st
   versions.forEach((version) => {
     if (version.originalUrl) urls.push(version.originalUrl);
     if (version.thumbnailUrl) urls.push(version.thumbnailUrl);
+  });
+  proxies.forEach((proxy) => {
+    if (proxy.objectKey) urls.push(proxy.objectKey);
   });
   return urls;
 }

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { formatCutDateFull } from '@/lib/cut-date';
 import { DownloadControls } from '@/components/video-page/download-controls';
 import { VersionDeleteDialog } from '@/components/video-page/version-delete-dialog';
 import { VersionActionsDialog } from '@/components/video-page/version-actions-dialog';
@@ -54,7 +55,7 @@ interface VideoPageHeaderProps {
   videoCanDownload: boolean;
   isDownloadingVideo: boolean;
   activeDownloadTarget: DownloadTarget | null;
-  onDownload: (preference?: BunnyDownloadPreference) => void;
+  onDownload: (preference?: BunnyDownloadPreference, proxyHeight?: number) => void;
   projectId?: string;
   videoId: string;
   directUploadsEnabled: boolean;
@@ -162,7 +163,16 @@ export const VideoPageHeader = memo(function VideoPageHeader({
       <div className="flex items-center gap-1.5 shrink-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="max-w-[13rem] xl:max-w-[19rem]">
+            <Button
+              variant="outline"
+              size="sm"
+              className="max-w-[13rem] xl:max-w-[19rem]"
+              title={
+                activeVersion.createdAt
+                  ? `Uploaded ${formatCutDateFull(activeVersion.createdAt)}`
+                  : undefined
+              }
+            >
               <Badge variant="secondary" className="mr-2 shrink-0">
                 v{activeVersion.versionNumber}
               </Badge>
@@ -174,15 +184,28 @@ export const VideoPageHeader = memo(function VideoPageHeader({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {versions.map((version) => (
-              <DropdownMenuItem key={version.id} onClick={() => onVersionSelect(version.id)}>
+              <DropdownMenuItem
+                key={version.id}
+                onClick={() => onVersionSelect(version.id)}
+                className="items-start"
+              >
                 <Badge
                   variant={version.id === activeVersionId ? 'default' : 'secondary'}
-                  className="mr-2"
+                  className="mr-2 mt-0.5"
                 >
                   v{version.versionNumber}
                 </Badge>
-                {version.versionLabel || `Cut ${version.versionNumber}`}
-                <span className="ml-auto text-xs text-muted-foreground">
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">
+                    {version.versionLabel || `Cut ${version.versionNumber}`}
+                  </span>
+                  {version.createdAt && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Uploaded {formatCutDateFull(version.createdAt)}
+                    </span>
+                  )}
+                </span>
+                <span className="ml-auto pl-3 text-xs text-muted-foreground whitespace-nowrap">
                   {version._count.comments} comments
                 </span>
               </DropdownMenuItem>

@@ -103,6 +103,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     where: { parentId: null },
                   },
                   _count: { select: { comments: true } },
+                  // Ready proxy renditions: playback picks one of these instead of
+                  // pulling the master, and the download menu offers them as qualities.
+                  proxies: {
+                    where: { status: 'READY' },
+                    orderBy: { height: 'desc' },
+                    select: { id: true, height: true },
+                  },
                 },
               }
             : {
@@ -117,7 +124,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   originalUrl: true,
                   title: true,
                   isActive: true,
+                  createdAt: true,
                   _count: { select: { comments: true } },
+                  // Ready proxy renditions: playback picks one of these instead of
+                  // pulling the master, and the download menu offers them as qualities.
+                  proxies: {
+                    where: { status: 'READY' },
+                    orderBy: { height: 'desc' },
+                    select: { id: true, height: true },
+                  },
                 },
               }),
         },

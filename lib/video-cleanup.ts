@@ -56,6 +56,7 @@ export async function cleanupVideoStorage(videoId: string): Promise<CleanupResul
     assetsCleared += 1;
   }
 
+  const clearedVersionIds: string[] = [];
   for (const version of video.versions) {
     if (keptVersion && version.id === keptVersion.id) continue;
     if (version.providerId === 'r2') {
@@ -64,7 +65,20 @@ export async function cleanupVideoStorage(videoId: string): Promise<CleanupResul
         proxyUrlsToDelete.push(version.thumbnailUrl);
       }
     }
+    clearedVersionIds.push(version.id);
     versionsCleared += 1;
+  }
+
+  // Proxy renditions of the cuts being cleared go with them (their rows cascade
+  // on the version delete below, so collect the keys first).
+  if (clearedVersionIds.length > 0) {
+    const proxies = await db.videoProxy.findMany({
+      where: { versionId: { in: clearedVersionIds }, objectKey: { not: null } },
+      select: { objectKey: true },
+    });
+    for (const proxy of proxies) {
+      if (proxy.objectKey) proxyUrlsToDelete.push(proxy.objectKey);
+    }
   }
 
   // DB: remove asset rows (except thumbnail) and ALL version rows except the

@@ -583,16 +583,59 @@ model VideoVersion {
   // Timestamps
   createdAt DateTime @default(now())
 
+  // Source geometry, measured by the transcode worker when it probes the cut.
+  // Drives the proxy ladder: never encode a proxy taller than the source.
+  sourceWidth  Int?
+  sourceHeight Int?
+
   // Relations
   comments         Comment[]
   watchProgress    WatchProgress[]
   approvalRequests ApprovalRequest[]
   markers          VideoMarker[]
+  proxies          VideoProxy[]
 
   @@unique([videoParentId, versionNumber])
   @@index([videoParentId])
   @@index([videoParentId, isActive])
   @@map("video_versions")
+}
+
+enum VideoProxyStatus {
+  PENDING // queued, waiting for a worker
+  PROCESSING // claimed by a worker
+  READY // encoded and stored
+  FAILED // worker gave up (see error)
+  SKIPPED // source is shorter than this rung — nothing to encode
+}
+
+/// A lightweight rendition of a cut. Review playback streams the proxy instead
+/// of the master (a 478MB 4K cut was being pulled in full on every view), and
+/// the download menu offers each ready rung alongside the untouched original.
+/// Encoding happens off-app in the transcode worker — this app never touches
+/// media bytes (see the 2026-07-13 OOM incident).
+model VideoProxy {
+  id        String       @id @default(cuid())
+  versionId String
+  version   VideoVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  height Int // 2160 | 1080 | 720 — the ladder rung
+  status VideoProxyStatus @default(PENDING)
+
+  objectKey String? // set once the encode is uploaded
+  width     Int?
+  sizeBytes BigInt  @default(0) @map("size_bytes")
+
+  attempts  Int       @default(0)
+  claimedAt DateTime?
+  error     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([versionId, height])
+  @@index([status, createdAt])
+  @@map("video_proxies")
 }
 
 model VideoAsset {

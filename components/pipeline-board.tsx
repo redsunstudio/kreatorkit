@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  Archive,
   Check,
   Film,
   Kanban,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -39,6 +41,7 @@ import { ThumbnailImage } from '@/components/thumbnail-image';
 import { resolvePublicBunnyCdnHostname } from '@/lib/bunny-cdn';
 import { resolveThumbnailUrl } from '@/lib/thumbnail-url';
 import { VIDEO_TYPES, typeMeta, typeOptionLabel } from '@/lib/video-type';
+import { formatCutDate, formatCutDateFull } from '@/lib/cut-date';
 
 // Bunny poster thumbnails are stored against a shared host that must be rewritten
 // to this library's pull-zone host before they will load (see resolveThumbnailUrl).
@@ -111,34 +114,10 @@ interface PipelineVideo {
   membersOnly?: boolean;
 }
 
-// Fixed locale + UTC so the server render and the client render agree (a
-// locale-dependent or timezone-dependent string hydrates mismatched).
-const DAY_FMT = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  timeZone: 'UTC',
-});
-const FULL_FMT = new Intl.DateTimeFormat('en-GB', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-
-/** "25 Jul", or "25 Jul 24" once the upload is in a previous calendar year. */
-export function formatCutDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const short = DAY_FMT.format(d);
-  const thisYear = new Date().getUTCFullYear();
-  return d.getUTCFullYear() === thisYear
-    ? short
-    : `${short} ${String(d.getUTCFullYear()).slice(2)}`;
-}
-
-export function formatCutDateFull(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : `${FULL_FMT.format(d)} UTC`;
-}
+// Cut-date formatting lives in lib/cut-date so the item page and the review
+// page format the same value identically. Re-exported here because callers
+// already import these two from the pipeline module.
+export { formatCutDate, formatCutDateFull } from '@/lib/cut-date';
 
 interface PipelineBoardProps {
   projectId?: string;
@@ -267,9 +246,21 @@ export function PipelineBoard({
   const [videoType, setVideoType] = useState('LONGFORM');
   const [creating, setCreating] = useState(false);
   const [dragOverStage, setDragOverStage] = useState<StageKey | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // keep local state in sync with fresh server props
   useEffect(() => setItems(videos), [videos]);
+
+  // A selection can only ever name rows that are still on the board.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const live = new Set(videos.map((v) => v.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [videos]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem('kk-pipeline-view');
@@ -362,6 +353,99 @@ export function PipelineBoard({
       setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: prev } : v)));
       toast.error('Could not update status — reverted');
     }
+  }
+
+  const selectionActive = selected.size > 0;
+
+  function toggleSelected(videoId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(videoId)) next.delete(videoId);
+      else next.add(videoId);
+      return next;
+    });
+  }
+
+  function setStageSelected(stageItems: PipelineVideo[], on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const v of stageItems) {
+        if (on) next.add(v.id);
+        else next.delete(v.id);
+      }
+      return next;
+    });
+  }
+
+  /**
+   * Batch status move. Same optimistic pattern as a single move, one request for
+   * the whole selection. "Archive" here parks items out of the pipeline (status
+   * only) — the destructive archive that deletes files stays a per-item action.
+   */
+  async function applyBulkStatus(next: string) {
+    if (!workspaceId || bulkBusy) return;
+    const ids = items.filter((v) => selected.has(v.id) && v.status !== next).map((v) => v.id);
+    if (ids.length === 0) {
+      toast.info('Those items are already there');
+      return;
+    }
+    const before = new Map(items.map((v) => [v.id, v.status]));
+    const targeted = new Set(ids);
+    setBulkBusy(true);
+    setItems((list) => list.map((v) => (targeted.has(v.id) ? { ...v, status: next } : v)));
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/videos/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoIds: ids, status: next }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error?.message || 'Could not update the selected items');
+
+      const skipped: { id: string; title: string; reason: string }[] = body?.data?.skipped ?? [];
+      if (skipped.length > 0) {
+        // Anything the server refused (packaging gate) must snap back, or the
+        // board would claim a move that never happened.
+        const blocked = new Set(skipped.map((s) => s.id));
+        setItems((list) =>
+          list.map((v) => (blocked.has(v.id) ? { ...v, status: before.get(v.id) ?? v.status } : v))
+        );
+        toast.warning(
+          skipped.length === 1
+            ? `"${skipped[0].title}" was not moved — ${skipped[0].reason}`
+            : `${skipped.length} items were not moved — packaging is not signed off`
+        );
+      }
+
+      const moved = body?.data?.updated ?? 0;
+      if (moved > 0) {
+        const label = PIPELINE_STAGES.find((s) => s.key === next)?.label ?? next;
+        toast.success(`${moved} item${moved === 1 ? '' : 's'} moved to ${label}`);
+      }
+      setSelected(new Set());
+    } catch (e) {
+      setItems((list) =>
+        list.map((v) => (targeted.has(v.id) ? { ...v, status: before.get(v.id) ?? v.status } : v))
+      );
+      toast.error(e instanceof Error ? e.message : 'Could not update the selected items');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function SelectBox({ v, className }: { v: PipelineVideo; className?: string }) {
+    if (!canEdit) return null;
+    return (
+      <input
+        type="checkbox"
+        aria-label={`Select ${v.title}`}
+        checked={selected.has(v.id)}
+        onChange={() => toggleSelected(v.id)}
+        onClick={(e) => e.stopPropagation()}
+        onDragStart={(e) => e.preventDefault()}
+        className={cn('h-3.5 w-3.5 accent-primary cursor-pointer', className)}
+      />
+    );
   }
 
   // Shared by both the board card and the list row's always-visible column —
@@ -474,6 +558,23 @@ export function PipelineBoard({
             }}
           >
             <div className="flex items-center gap-2 mb-2">
+              {canEdit && stageItems.length > 0 && (
+                <input
+                  type="checkbox"
+                  aria-label={`Select everything in ${stage.label}`}
+                  title={`Select everything in ${stage.label}`}
+                  checked={stageItems.every((v) => selected.has(v.id))}
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate =
+                        stageItems.some((v) => selected.has(v.id)) &&
+                        !stageItems.every((v) => selected.has(v.id));
+                    }
+                  }}
+                  onChange={(e) => setStageSelected(stageItems, e.target.checked)}
+                  className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                />
+              )}
               <span className="text-sm leading-none">{stage.emoji}</span>
               <span className="text-sm font-semibold">{stage.label}</span>
               <span className="text-xs text-muted-foreground font-mono">{stageItems.length}</span>
@@ -498,10 +599,23 @@ export function PipelineBoard({
                     draggable={canEdit}
                     onDragStart={(e) => e.dataTransfer.setData('text/kk-video', v.id)}
                     className={cn(
-                      'group grid grid-cols-[64px_minmax(0,1fr)_104px_20px_auto] items-center gap-x-3 px-4 py-2 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
-                      canEdit && 'cursor-grab active:cursor-grabbing'
+                      'group grid items-center gap-x-3 px-4 py-2 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
+                      canEdit
+                        ? 'grid-cols-[16px_64px_minmax(0,1fr)_104px_20px_auto]'
+                        : 'grid-cols-[64px_minmax(0,1fr)_104px_20px_auto]',
+                      canEdit && 'cursor-grab active:cursor-grabbing',
+                      selected.has(v.id) && 'bg-primary/[0.07] border-l-primary'
                     )}
                   >
+                    <SelectBox
+                      v={v}
+                      className={cn(
+                        'transition-opacity',
+                        'pointer-coarse:opacity-100',
+                        !selectionActive &&
+                          'pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus:opacity-100'
+                      )}
+                    />
                     <Thumb v={v} size="row" />
                     <div className="min-w-0">
                       <Link
@@ -624,10 +738,20 @@ export function PipelineBoard({
                   draggable={canEdit}
                   onDragStart={(e) => e.dataTransfer.setData('text/kk-video', v.id)}
                   className={cn(
-                    'rounded-md border bg-background p-3 transition-all duration-150 hover:border-primary/50',
-                    canEdit && 'cursor-grab active:cursor-grabbing'
+                    'group relative rounded-md border bg-background p-3 transition-all duration-150 hover:border-primary/50',
+                    canEdit && 'cursor-grab active:cursor-grabbing',
+                    selected.has(v.id) && 'border-primary bg-primary/[0.07]'
                   )}
                 >
+                  <SelectBox
+                    v={v}
+                    className={cn(
+                      'absolute left-4 top-4 z-10 rounded-sm bg-background/80 transition-opacity',
+                      'pointer-coarse:opacity-100',
+                      !selectionActive &&
+                        'pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus:opacity-100'
+                    )}
+                  />
                   <Link href={itemHref(v)} className="block">
                     <Thumb v={v} size="card" />
                   </Link>
@@ -745,6 +869,51 @@ export function PipelineBoard({
         listView
       ) : (
         boardView
+      )}
+
+      {canEdit && workspaceId && selectionActive && (
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-full border bg-background/95 px-3 py-2 shadow-lg backdrop-blur">
+            <span className="pl-1 text-xs font-medium tabular-nums">{selected.size} selected</span>
+            <Separator orientation="vertical" className="h-5" />
+            <Select value="" onValueChange={(next) => void applyBulkStatus(next)}>
+              <SelectTrigger className="h-8 w-[168px] text-xs px-2" disabled={bulkBusy}>
+                <SelectValue placeholder="Move to stage…" />
+              </SelectTrigger>
+              <SelectContent>
+                {PIPELINE_STAGES.filter((s) => s.key !== 'ARCHIVED').map((st) => (
+                  <SelectItem key={st.key} value={st.key} className="text-xs">
+                    {st.emoji} {st.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={bulkBusy}
+              onClick={() => void applyBulkStatus('ARCHIVED')}
+              title="Park these out of the pipeline. Files are kept — only the item page deletes media."
+            >
+              {bulkBusy ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Archive className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Archive
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              disabled={bulkBusy}
+              onClick={() => setSelected(new Set())}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

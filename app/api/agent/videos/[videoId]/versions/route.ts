@@ -21,6 +21,7 @@ import {
 } from '@/lib/video-upload-validation';
 import { logError } from '@/lib/logger';
 import { notifyReviewReady } from '@/lib/review-notify';
+import { enqueueProxyJobs } from '@/lib/video-proxy';
 
 interface RouteParams {
   params: Promise<{ videoId: string }>;
@@ -195,6 +196,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
         { isolationLevel: 'Serializable' }
       );
+
+      // Queue the proxy ladder for the new cut (playback + download qualities).
+      void enqueueProxyJobs(version.id, 'r2');
 
       const updated = await db.video.findUnique({
         where: { id: videoId },
