@@ -77,11 +77,21 @@ function LoginFormInner({
     setIsLoading(true);
     setError('');
     try {
-      await fetch('/api/auth/otp/request', {
+      const res = await fetch('/api/auth/otp/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
       });
+      // A rate-limited or failed request sends NOTHING — claiming "code sent"
+      // here left people waiting on an email that was never coming.
+      if (res.status === 429) {
+        setError('Too many code requests — wait a few minutes, then try again.');
+        return;
+      }
+      if (!res.ok) {
+        setError('Could not send the code — try again.');
+        return;
+      }
       setCodeSent(true);
       setResendIn(30);
       setTimeout(() => codeInput.current?.focus(), 50);
@@ -216,7 +226,8 @@ function LoginFormInner({
                   disabled={anyLoading}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Check {email.trim()} — the code lasts 10 minutes.{' '}
+                  Check {email.trim()} (and spam) — the code lasts 10 minutes. No email? Make sure
+                  this is the address your KreatorKit account uses.{' '}
                   <button
                     type="button"
                     className="underline disabled:opacity-50"
