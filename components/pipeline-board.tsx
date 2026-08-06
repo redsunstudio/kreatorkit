@@ -692,13 +692,10 @@ export function PipelineBoard({
                     <div className="flex items-center justify-center">
                       <PackagingWarningIcon v={v} />
                     </div>
-                    <div
-                      className={cn(
-                        'flex items-center gap-2 justify-self-end transition-opacity',
-                        'pointer-coarse:opacity-100',
-                        'pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100'
-                      )}
-                    >
+                    {/* Always visible — John's continuity rule: per-item actions
+                        (Review, Copy link, status) must be discoverable without
+                        hovering, on every row. */}
+                    <div className="flex items-center gap-2 justify-self-end">
                       <span className="text-xs" title={t.label}>
                         {t.emoji}
                       </span>

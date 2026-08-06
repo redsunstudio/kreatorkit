@@ -1676,7 +1676,7 @@ export function VideoItemClient({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">Post copy</p>
                   {description.trim() ? (
-                    <p className="text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+                    <p className="text-muted-foreground line-clamp-3 whitespace-pre-wrap break-words">
                       {description}
                     </p>
                   ) : (
@@ -1734,7 +1734,9 @@ export function VideoItemClient({
               </div>
             </div>
 
-            <AlertDialogFooter>
+            {/* Four buttons exceed the dialog width on desktop — wrap instead
+                of bleeding out the edge. */}
+            <AlertDialogFooter className="sm:flex-wrap">
               <AlertDialogCancel disabled={publishing}>Cancel</AlertDialogCancel>
               <Button
                 variant="outline"
@@ -1787,7 +1789,9 @@ export function VideoItemClient({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">Description</p>
                   {description.trim() ? (
-                    <p className="text-muted-foreground line-clamp-2">{description}</p>
+                    // break-words: YouTube descriptions carry long URLs, which
+                    // line-clamp alone lets paint past the dialog edge.
+                    <p className="text-muted-foreground line-clamp-2 break-words">{description}</p>
                   ) : (
                     <Textarea
                       value={description}
@@ -1809,7 +1813,7 @@ export function VideoItemClient({
                   {thumbnailUrl ? (
                     <ThumbnailImage
                       src={thumbnailUrl.includes('?') ? thumbnailUrl : `${thumbnailUrl}?inline=1`}
-                      className="mt-1.5 h-16 rounded-md border object-cover"
+                      className="mt-1.5 h-16 max-w-full rounded-md border object-cover"
                       fallback={
                         <div className="mt-1.5 h-16 w-28 rounded-md border bg-white/[0.04] flex items-center justify-center text-base text-muted-foreground">
                           🎬
