@@ -51,25 +51,24 @@ export function packagingState(video: PackagingInput): PackagingState {
 }
 
 /**
- * Statuses that require packaging to be signed off first.
+ * The gate is on the PUSH, not on the board (John, 2026-08-06).
  *
- * EDITING is the front gate — the whole point of the change. APPROVED is the back
- * stop, so an edit can never be approved with the packaging still undone.
+ * Gating status moves turned the sign-off into a handbrake: an item could not be
+ * marked approved, or walked back for a re-edit, until somebody stamped the
+ * packaging — which is exactly when you most want the board telling the truth
+ * about where the work is. Status now moves freely. What packaging protects is
+ * the step that is hard to take back: content reaching the client's channel.
  *
- * Deliberately NOT gated: REVIEW. A cut upload auto-flips an item into REVIEW and
- * blocking that would mean refusing an editor's upload, which is the wrong place
- * to argue about a thumbnail.
+ * Zernio drafts are exempt — they park in Zernio and never touch YouTube.
  */
-export const PACKAGING_GATED_STATUSES = new Set(['EDITING', 'APPROVED']);
-
-export function packagingBlocksStatus(next: string, state: PackagingState): boolean {
-  return PACKAGING_GATED_STATUSES.has(next) && !state.confirmed;
+export function packagingBlocksPublish(mode: string, state: PackagingState): boolean {
+  return mode !== 'draft' && !state.confirmed;
 }
 
-export function packagingErrorMessage(state: PackagingState, next: string): string {
+export function packagingErrorMessage(state: PackagingState): string {
   const what = state.missing.join(', ');
   return (
-    `Packaging must be done before an item moves to ${next.toLowerCase()} — still missing: ${what}. ` +
+    `Packaging is not signed off, so this cannot go to YouTube yet — still missing: ${what}. ` +
     `Set the title, thumbnail and description on the item, then mark the packaging done.`
   );
 }

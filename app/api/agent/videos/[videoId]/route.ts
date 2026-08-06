@@ -2,11 +2,6 @@ import { NextRequest } from 'next/server';
 import { VideoStatus, VideoType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
-import {
-  packagingBlocksStatus,
-  packagingErrorMessage,
-  packagingState,
-} from '@/lib/video-packaging';
 import { isAgentRequest } from '@/lib/agent-auth';
 import { createPresignedFileGetUrl, createPresignedVideoGetUrl } from '@/lib/r2';
 import { collectVideoMediaUrls, deleteMediaFilesBestEffort } from '@/lib/r2-cleanup';
@@ -128,33 +123,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return apiErrors.badRequest('description must be a string');
     }
 
-    // Packaging gate — the agent rail obeys the same rule as the UI, so an
-    // automation cannot walk an item into edit or approval with no packaging.
-    // Pass force:true to override (used by migrations/backfills, not by flows).
-    if (typeof status === 'string' && body?.force !== true) {
-      const current = await db.video.findUnique({
-        where: { id: videoId },
-        select: {
-          status: true,
-          title: true,
-          description: true,
-          thumbnailUrl: true,
-          packagingConfirmedAt: true,
-        },
-      });
-      if (!current) return apiErrors.notFound('Video');
-      if (current.status !== status) {
-        const state = packagingState({
-          title: typeof body?.title === 'string' ? body.title : current.title,
-          thumbnailUrl: body?.thumbnailUrl !== undefined ? body.thumbnailUrl : current.thumbnailUrl,
-          description: typeof description === 'string' ? description : current.description,
-          packagingConfirmedAt: current.packagingConfirmedAt,
-        });
-        if (packagingBlocksStatus(status, state)) {
-          return apiErrors.badRequest(packagingErrorMessage(state, status));
-        }
-      }
-    }
+    // No packaging gate on status — the agent rail matches the UI. Packaging is
+    // enforced where it matters, on the push to YouTube (lib/publish-video).
 
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;
@@ -198,14 +168,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.description = description === null ? null : String(description).trim() || null;
     if (Object.keys(updateData).length === 0) return apiErrors.badRequest('nothing to update');
 
-    const prior =
-      updateData.status === 'REVIEW'
-        ? await db.video.findUnique({ where: { id: videoId }, select: { status: true } })
-        : null;
+    // Read first so an unknown id is a clean 404 rather than an update throwing.
+    const prior = await db.video.findUnique({ where: { id: videoId }, select: { status: true } });
+    if (!prior) return apiErrors.notFound('Video');
     const video = await db.video.update({ where: { id: videoId }, data: updateData });
 
     // Agent flip into REVIEW — tell the reviewers.
-    if (updateData.status === 'REVIEW' && prior && prior.status !== 'REVIEW') {
+    if (updateData.status === 'REVIEW' && prior.status !== 'REVIEW') {
       notifyReviewReady({ videoId, actorName: 'the editing team' }).catch((err) =>
         logError('Notification failed:', err)
       );

@@ -6,11 +6,6 @@ import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response
 import { rateLimit } from '@/lib/rate-limit';
 import { logError } from '@/lib/logger';
 import { notifyReviewReady } from '@/lib/review-notify';
-import {
-  packagingBlocksStatus,
-  packagingErrorMessage,
-  packagingState,
-} from '@/lib/video-packaging';
 
 interface RouteParams {
   params: Promise<{ workspaceId: string }>;
@@ -18,8 +13,6 @@ interface RouteParams {
 
 /** One bar-click should never be able to sweep a whole client's board by accident. */
 const MAX_BULK_ITEMS = 200;
-
-type SkippedItem = { id: string; title: string; reason: string };
 
 // POST /api/workspaces/[workspaceId]/videos/bulk
 //
@@ -69,45 +62,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (typeof status !== 'string' || !VIDEO_STATUSES.includes(status)) {
       return apiErrors.badRequest('status must be one of ' + VIDEO_STATUSES.join(', '));
     }
-    const force = body?.force === true;
-
     // Scoped to this workspace: ids from another client's board silently drop out.
     const videos = await db.video.findMany({
       where: { id: { in: videoIds }, project: { workspaceId } },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        thumbnailUrl: true,
-        description: true,
-        packagingConfirmedAt: true,
-      },
+      select: { id: true, status: true },
     });
 
-    const skipped: SkippedItem[] = [];
     const toUpdate: string[] = [];
     const toNotify: string[] = [];
 
     for (const video of videos) {
       if (video.status === status) continue; // already there — not a failure
-
-      if (!force) {
-        const state = packagingState({
-          title: video.title,
-          thumbnailUrl: video.thumbnailUrl,
-          description: video.description,
-          packagingConfirmedAt: video.packagingConfirmedAt,
-        });
-        if (packagingBlocksStatus(status, state)) {
-          skipped.push({
-            id: video.id,
-            title: video.title,
-            reason: packagingErrorMessage(state, status),
-          });
-          continue;
-        }
-      }
-
       toUpdate.push(video.id);
       if (status === VideoStatus.REVIEW) toNotify.push(video.id);
     }
@@ -131,9 +96,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const response = successResponse({
       updated: toUpdate.length,
-      unchanged: videos.length - toUpdate.length - skipped.length,
+      unchanged: videos.length - toUpdate.length,
       notFound: videoIds.length - videos.length,
-      skipped,
     });
     return withCacheControl(response, 'private, no-store');
   } catch (error) {

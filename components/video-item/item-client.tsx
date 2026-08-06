@@ -953,7 +953,7 @@ export function VideoItemClient({
         </div>
       </div>
 
-      {/* Packaging gate - the front of the process, not the end of it. */}
+      {/* Packaging - settled at the front of the process, enforced on the push. */}
       {!isPost && (
         <div
           className={
@@ -972,7 +972,7 @@ export function VideoItemClient({
                 ? 'Signed off' +
                   (packagedBy ? ' by ' + packagedBy : '') +
                   ' - the team reviews the title, thumbnail and description alongside the cut.'
-                : 'Settle these before the edit starts, so nothing gets approved with the packaging undone.'}
+                : 'Settle these before the edit starts. The item can move through the board either way, but nothing goes to YouTube until this is signed off.'}
             </span>
             <div className="ml-auto flex items-center gap-2">
               {!packaging.confirmed && canEdit && (
@@ -1769,7 +1769,7 @@ export function VideoItemClient({
               <AlertDialogTitle>📺 Push to YouTube</AlertDialogTitle>
               <AlertDialogDescription>
                 The current cut lands in the channel&apos;s YouTube Studio as a private draft — set
-                it live from Studio when ready. Three things need to be in first:
+                it live from Studio when ready. The packaging has to be signed off first:
               </AlertDialogDescription>
             </AlertDialogHeader>
 
@@ -1838,13 +1838,49 @@ export function VideoItemClient({
                   )}
                 </div>
               </div>
+
+              {/* The gate itself. All three above can be filled in and still not
+                  be final — the push waits for somebody to say that they are. */}
+              <div className="flex items-start gap-2.5 border-t pt-3.5">
+                <span className="flex-none mt-0.5">{packaging.confirmed ? '✅' : '❌'}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">Packaging signed off</p>
+                  {packaging.confirmed ? (
+                    <p className="text-muted-foreground">
+                      Signed off{packagedBy ? ` by ${packagedBy}` : ''}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-muted-foreground">
+                        {packaging.ready
+                          ? 'Confirm the title, thumbnail and description are final.'
+                          : `Still missing: ${packaging.missing.join(', ')}`}
+                      </p>
+                      {canEdit && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1.5"
+                          disabled={!packaging.ready || confirmingPackaging}
+                          onClick={() => void confirmPackaging(true)}
+                        >
+                          {confirmingPackaging ? (
+                            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                          ) : null}
+                          Mark packaging done
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
             <AlertDialogFooter>
               <AlertDialogCancel disabled={publishing}>Cancel</AlertDialogCancel>
               <Button
                 onClick={() => void pushToYouTube()}
-                disabled={publishing || !title.trim() || !description.trim() || !thumbnailUrl}
+                disabled={publishing || !packaging.confirmed}
               >
                 {publishing ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : '📺 '}
                 Push to YouTube

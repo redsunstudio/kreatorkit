@@ -43,7 +43,6 @@ import { resolvePublicBunnyCdnHostname } from '@/lib/bunny-cdn';
 import { resolveThumbnailUrl } from '@/lib/thumbnail-url';
 import { VIDEO_TYPES, typeMeta, typeOptionLabel } from '@/lib/video-type';
 import { formatCutDate, formatCutDateFull, formatCutDateRelative } from '@/lib/cut-date';
-import { PACKAGING_GATED_STATUSES } from '@/lib/video-packaging';
 
 // Bunny poster thumbnails are stored against a shared host that must be rewritten
 // to this library's pull-zone host before they will load (see resolveThumbnailUrl).
@@ -343,17 +342,6 @@ export function PipelineBoard({
     const current = items.find((v) => v.id === videoId);
     if (!current || current.status === next) return;
 
-    // The packaging gate refuses these moves server-side anyway — saying so
-    // BEFORE the move beats an optimistic flip that snaps back a second later
-    // with a generic error (the "drag-drop randomly fails" report was this).
-    if (PACKAGING_GATED_STATUSES.has(next) && current.packagingDone === false) {
-      const label = PIPELINE_STAGES.find((s) => s.key === next)?.label ?? next;
-      toast.warning(
-        `Title, thumbnail and description are not signed off — "${current.title}" can't move to ${label} yet.`
-      );
-      return;
-    }
-
     const prev = current.status;
     setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: next } : v)));
     const patch = () =>
@@ -376,8 +364,8 @@ export function PipelineBoard({
       }
     } catch (e) {
       setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: prev } : v)));
-      // The server's refusal reason (packaging gate, validation) is the
-      // useful part — show it when there is one.
+      // The server's refusal reason (validation) is the useful part — show it
+      // when there is one.
       const reason = e instanceof Error && e.message ? e.message : '';
       toast.error(reason || 'Could not update status — reverted');
     }
@@ -429,21 +417,6 @@ export function PipelineBoard({
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message || 'Could not update the selected items');
-
-      const skipped: { id: string; title: string; reason: string }[] = body?.data?.skipped ?? [];
-      if (skipped.length > 0) {
-        // Anything the server refused (packaging gate) must snap back, or the
-        // board would claim a move that never happened.
-        const blocked = new Set(skipped.map((s) => s.id));
-        setItems((list) =>
-          list.map((v) => (blocked.has(v.id) ? { ...v, status: before.get(v.id) ?? v.status } : v))
-        );
-        toast.warning(
-          skipped.length === 1
-            ? `"${skipped[0].title}" was not moved — ${skipped[0].reason}`
-            : `${skipped.length} items were not moved — packaging is not signed off`
-        );
-      }
 
       const moved = body?.data?.updated ?? 0;
       if (moved > 0) {
@@ -535,7 +508,7 @@ export function PipelineBoard({
   }
 
   const PACKAGING_WARNING_TITLE =
-    'Title, thumbnail and description are not signed off - this cannot be approved';
+    'Title, thumbnail and description are not signed off - this cannot be pushed to YouTube yet';
 
   function packagingIncomplete(v: PipelineVideo): boolean {
     return v.packagingDone === false && stageOf(v.status) !== 'IDEA';

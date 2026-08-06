@@ -5,9 +5,10 @@
 // Modes:
 //   studio — publishNow with visibility PRIVATE: the video lands in the
 //            client's YouTube Studio as a private draft they set live. This is
-//            the "Push to YouTube" button. Gated on title+description+thumbnail.
-//   draft  — parked in Zernio as a draft (automation staging).
-//   live   — publishNow public; the item auto-flips to PUBLISHED.
+//            the "Push to YouTube" button. Gated on the packaging sign-off.
+//   draft  — parked in Zernio as a draft (automation staging). Never reaches
+//            the channel, so it is the one mode the packaging gate lets through.
+//   live   — publishNow public; the item auto-flips to PUBLISHED. Gated.
 
 import { db } from '@/lib/db';
 import { createPresignedFileGetUrl, createPresignedVideoGetUrl } from '@/lib/r2';
@@ -18,6 +19,11 @@ import {
   zernioUploadFromUrl,
 } from '@/lib/zernio';
 import type { ZernioMediaItem } from '@/lib/zernio';
+import {
+  packagingBlocksPublish,
+  packagingErrorMessage,
+  packagingState,
+} from '@/lib/video-packaging';
 
 export type PublishMode = 'studio' | 'draft' | 'live';
 
@@ -154,15 +160,14 @@ export async function publishVideoToYouTube(
   const checks = publishChecks(video);
   if (!checks.cut)
     throw new PublishError('No uploaded cut to publish — upload the final cut first');
-  if (mode !== 'draft') {
-    const missing = [
-      !checks.title && 'a title',
-      !checks.description && 'a description',
-      !checks.thumbnail && 'a thumbnail',
-    ].filter(Boolean);
-    if (missing.length > 0) {
-      throw new PublishError(`Not ready to push — add ${missing.join(', ')} first`);
-    }
+
+  // The packaging gate lives here and nowhere else. Statuses move freely on the
+  // board; nothing reaches the client's channel until someone has said the
+  // title, thumbnail and description are final. The stamp implies all three are
+  // present, so this subsumes the old field-by-field check.
+  const packaging = packagingState(video);
+  if (packagingBlocksPublish(mode, packaging)) {
+    throw new PublishError(packagingErrorMessage(packaging));
   }
 
   // Isolation guard: the wired channel must be visible to THIS workspace's own

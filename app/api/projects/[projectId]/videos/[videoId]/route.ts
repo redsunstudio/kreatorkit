@@ -11,11 +11,7 @@ import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response
 import { logError } from '@/lib/logger';
 import { canDownloadProjectMedia } from '@/lib/project-download';
 import { notifyReviewReady } from '@/lib/review-notify';
-import {
-  packagingBlocksStatus,
-  packagingErrorMessage,
-  packagingState,
-} from '@/lib/video-packaging';
+import { packagingState } from '@/lib/video-packaging';
 
 function bigintSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
@@ -213,7 +209,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       postOptions,
       packagingConfirmed,
       membersOnly,
-      force,
     } = body;
 
     // Validate types before using string methods to prevent type confusion attacks
@@ -274,20 +269,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Packaging gate. Deliberately applied to EXPLICIT moves only — the auto-flips
-    // that happen when footage or a cut is uploaded must never be refused, since
-    // blocking an upload is the wrong way to argue about a thumbnail.
-    if (typeof status === 'string' && status !== video.status && force !== true) {
-      const state = packagingState({
-        title: typeof title === 'string' ? title : video.title,
-        thumbnailUrl: thumbnailUrl !== undefined ? thumbnailUrl : video.thumbnailUrl,
-        description: typeof description === 'string' ? description : video.description,
-        packagingConfirmedAt: video.packagingConfirmedAt,
-      });
-      if (packagingBlocksStatus(status, state)) {
-        return apiErrors.badRequest(packagingErrorMessage(state, status));
-      }
-    }
+    // No packaging gate on status. Where an item sits on the board is a fact
+    // about the work, not a reward for finishing the packaging — the sign-off
+    // is enforced on the push to YouTube instead (lib/publish-video).
 
     if (membersOnly !== undefined) {
       if (typeof membersOnly !== 'boolean') {
