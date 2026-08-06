@@ -73,8 +73,10 @@ export async function GET(request: NextRequest) {
         _count: { select: { versions: true } },
         versions: {
           select: {
-            _count: { select: { comments: true } },
-            comments: { where: { isResolved: false }, select: { id: true } },
+            // parentId: null — count threads, not messages, so these agree with
+            // /comments' own totals and with the board badge.
+            _count: { select: { comments: { where: { parentId: null } } } },
+            comments: { where: { isResolved: false, parentId: null }, select: { id: true } },
           },
         },
       },

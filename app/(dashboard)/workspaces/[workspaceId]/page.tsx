@@ -94,9 +94,17 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
       // 0 the moment an editor uploaded a new cut — a client reading the board
       // after an upload would see their whole review apparently wiped. Summed in
       // JS because the count lives a relation away from Video.
+      //
+      // parentId: null counts THREADS, not messages — the same rule the review
+      // page's own total uses. Without it a thread with five replies reads as
+      // six pieces of feedback and the board disagrees with the page the client
+      // is looking at.
       db.videoVersion.findMany({
         where: { video: PIPELINE_STATUS_FILTER },
-        select: { videoParentId: true, _count: { select: { comments: true } } },
+        select: {
+          videoParentId: true,
+          _count: { select: { comments: { where: { parentId: null } } } },
+        },
       }),
     ]);
 
