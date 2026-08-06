@@ -41,7 +41,7 @@ import { ThumbnailImage } from '@/components/thumbnail-image';
 import { resolvePublicBunnyCdnHostname } from '@/lib/bunny-cdn';
 import { resolveThumbnailUrl } from '@/lib/thumbnail-url';
 import { VIDEO_TYPES, typeMeta, typeOptionLabel } from '@/lib/video-type';
-import { formatCutDate, formatCutDateFull } from '@/lib/cut-date';
+import { formatCutDate, formatCutDateFull, formatCutDateRelative } from '@/lib/cut-date';
 
 // Bunny poster thumbnails are stored against a shared host that must be rewritten
 // to this library's pull-zone host before they will load (see resolveThumbnailUrl).
@@ -450,7 +450,7 @@ export function PipelineBoard({
 
   // Shared by both the board card and the list row's always-visible column —
   // one visual source of truth for "what cut/idea state is this at."
-  function VersionMarker({ v }: { v: PipelineVideo }) {
+  function VersionMarker({ v, withDate = true }: { v: PipelineVideo; withDate?: boolean }) {
     return (
       <span
         className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono"
@@ -463,7 +463,7 @@ export function PipelineBoard({
         {v.currentVersion > 0 ? (
           <>
             <Film className="h-3 w-3" />v{v.currentVersion}
-            {v.latestCutAt && (
+            {withDate && v.latestCutAt && (
               <span className="text-muted-foreground/70">· {formatCutDate(v.latestCutAt)}</span>
             )}
           </>
@@ -472,6 +472,30 @@ export function PipelineBoard({
             <Lightbulb className="h-3 w-3" />
             idea
           </>
+        )}
+      </span>
+    );
+  }
+
+  // The always-visible middle column on list rows: comment count + when the
+  // latest cut landed ("uploaded 3 hours ago" inside 24h, then the date).
+  function RowActivity({ v }: { v: PipelineVideo }) {
+    return (
+      <span className="inline-flex items-center gap-3 justify-self-end text-xs text-muted-foreground font-mono whitespace-nowrap">
+        {v.commentCount > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <MessageSquare className="h-3 w-3" />
+            {v.commentCount}
+          </span>
+        )}
+        {v.latestCutAt && (
+          <span
+            suppressHydrationWarning
+            className="text-muted-foreground/70"
+            title={formatCutDateFull(v.latestCutAt)}
+          >
+            {formatCutDateRelative(v.latestCutAt)}
+          </span>
         )}
       </span>
     );
@@ -601,8 +625,8 @@ export function PipelineBoard({
                     className={cn(
                       'group grid items-center gap-x-3 px-4 py-2 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
                       canEdit
-                        ? 'grid-cols-[16px_64px_minmax(0,1fr)_104px_20px_auto]'
-                        : 'grid-cols-[64px_minmax(0,1fr)_104px_20px_auto]',
+                        ? 'grid-cols-[16px_64px_minmax(0,1fr)_auto_64px_20px_auto]'
+                        : 'grid-cols-[64px_minmax(0,1fr)_auto_64px_20px_auto]',
                       canEdit && 'cursor-grab active:cursor-grabbing',
                       selected.has(v.id) && 'bg-primary/[0.07] border-l-primary'
                     )}
@@ -630,7 +654,8 @@ export function PipelineBoard({
                         </p>
                       )}
                     </div>
-                    <VersionMarker v={v} />
+                    <RowActivity v={v} />
+                    <VersionMarker v={v} withDate={false} />
                     <div className="flex items-center justify-center">
                       <PackagingWarningIcon v={v} />
                     </div>
@@ -647,12 +672,6 @@ export function PipelineBoard({
                       {v.membersOnly && (
                         <span title="Members only - publish privately, then switch visibility in YouTube Studio">
                           <Users className="h-3 w-3 text-muted-foreground" />
-                        </span>
-                      )}
-                      {v.commentCount > 0 && (
-                        <span className="text-xs text-muted-foreground inline-flex items-center gap-1 font-mono">
-                          <MessageSquare className="h-3 w-3" />
-                          {v.commentCount}
                         </span>
                       )}
                       {reviewHref(v) && (
