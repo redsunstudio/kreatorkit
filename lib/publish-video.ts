@@ -135,6 +135,23 @@ export async function publishVideoToYouTube(
     );
   }
 
+  // Item readiness before workspace plumbing: "the packaging isn't signed off"
+  // is something the person looking at the item can act on, whereas a missing
+  // Zernio key is somebody else's settings page. Complain about the near thing
+  // first.
+  const checks = publishChecks(video);
+  if (!checks.cut)
+    throw new PublishError('No uploaded cut to publish — upload the final cut first');
+
+  // The packaging gate lives here and nowhere else. Statuses move freely on the
+  // board; nothing reaches the client's channel until someone has said the
+  // title, thumbnail and description are final. The stamp implies all three are
+  // present, so this subsumes the old field-by-field check.
+  const packaging = packagingState(video);
+  if (packagingBlocksPublish(mode, packaging)) {
+    throw new PublishError(packagingErrorMessage(packaging));
+  }
+
   const cfg = workspaceZernioConfig(video.project.workspace.publishing);
   const apiKey = cfg.apiKey;
   if (!apiKey) {
@@ -155,19 +172,6 @@ export async function publishVideoToYouTube(
     throw new PublishError(
       `This video already went to Zernio (post ${video.zernioPostId}) — it may be live or in the client's Studio. Pass force:true only if you really want a second push.`
     );
-  }
-
-  const checks = publishChecks(video);
-  if (!checks.cut)
-    throw new PublishError('No uploaded cut to publish — upload the final cut first');
-
-  // The packaging gate lives here and nowhere else. Statuses move freely on the
-  // board; nothing reaches the client's channel until someone has said the
-  // title, thumbnail and description are final. The stamp implies all three are
-  // present, so this subsumes the old field-by-field check.
-  const packaging = packagingState(video);
-  if (packagingBlocksPublish(mode, packaging)) {
-    throw new PublishError(packagingErrorMessage(packaging));
   }
 
   // Isolation guard: the wired channel must be visible to THIS workspace's own
