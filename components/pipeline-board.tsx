@@ -482,8 +482,14 @@ export function PipelineBoard({
   // landed ("3 hours ago" inside 24h, then the date) + 💬 comment count.
   // Both show whenever the item has a cut — a zero comment count is
   // information too (John: "comment logo 0"). Idea items have neither.
+  //
+  // It must still render its (empty) span on a cutless item. The list row is a
+  // fixed 7-track grid relying on auto-placement, so returning null here removes
+  // a child and shifts every later one a track to the left — which lands the
+  // whole actions cluster in the 20px warning track and paints it over the
+  // status pill. That was the "overlapping rows" bug on thumbnail-only items.
   function RowActivity({ v }: { v: PipelineVideo }) {
-    if (v.currentVersion === 0) return null;
+    if (v.currentVersion === 0) return <span aria-hidden />;
     return (
       <span className="inline-flex items-center gap-3 justify-self-end text-xs text-muted-foreground font-mono whitespace-nowrap">
         {v.latestCutAt && (
