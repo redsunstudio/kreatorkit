@@ -780,7 +780,11 @@ export function PipelineBoard({
                   >
                     {v.title}
                   </Link>
-                  <div className="flex items-center gap-3 mt-2">
+                  {/* flex-wrap: the meta cluster + action buttons overflow a 250px
+                      card at their widest ("Long form" + v18 date + pkg + 💬) —
+                      wrapping drops the buttons to their own line instead of
+                      pushing them out the card edge. */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
                     {rowMeta(v)}
                     {reviewHref(v) && (
                       <div className="ml-auto flex items-center gap-1">
