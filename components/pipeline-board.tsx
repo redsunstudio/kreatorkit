@@ -42,6 +42,7 @@ import { resolvePublicBunnyCdnHostname } from '@/lib/bunny-cdn';
 import { resolveThumbnailUrl } from '@/lib/thumbnail-url';
 import { VIDEO_TYPES, typeMeta, typeOptionLabel } from '@/lib/video-type';
 import { formatCutDate, formatCutDateFull, formatCutDateRelative } from '@/lib/cut-date';
+import { PACKAGING_GATED_STATUSES } from '@/lib/video-packaging';
 
 // Bunny poster thumbnails are stored against a shared host that must be rewritten
 // to this library's pull-zone host before they will load (see resolveThumbnailUrl).
@@ -340,18 +341,44 @@ export function PipelineBoard({
   async function moveStatus(videoId: string, next: string) {
     const current = items.find((v) => v.id === videoId);
     if (!current || current.status === next) return;
+
+    // The packaging gate refuses these moves server-side anyway — saying so
+    // BEFORE the move beats an optimistic flip that snaps back a second later
+    // with a generic error (the "drag-drop randomly fails" report was this).
+    if (PACKAGING_GATED_STATUSES.has(next) && current.packagingDone === false) {
+      const label = PIPELINE_STAGES.find((s) => s.key === next)?.label ?? next;
+      toast.warning(
+        `Title, thumbnail and description are not signed off — "${current.title}" can't move to ${label} yet.`
+      );
+      return;
+    }
+
     const prev = current.status;
     setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: next } : v)));
-    try {
-      const res = await fetch(`/api/projects/${current.projectId || projectId}/videos/${videoId}`, {
+    const patch = () =>
+      fetch(`/api/projects/${current.projectId || projectId}/videos/${videoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: next }),
       });
-      if (!res.ok) throw new Error();
-    } catch {
+    try {
+      let res = await patch();
+      if (res.status === 429) {
+        // Rapid triage can exhaust the mutate bucket — one spaced retry
+        // usually clears it without bothering the user.
+        await new Promise((r) => setTimeout(r, 1500));
+        res = await patch();
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error?.message || '');
+      }
+    } catch (e) {
       setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: prev } : v)));
-      toast.error('Could not update status — reverted');
+      // The server's refusal reason (packaging gate, validation) is the
+      // useful part — show it when there is one.
+      const reason = e instanceof Error && e.message ? e.message : '';
+      toast.error(reason || 'Could not update status — reverted');
     }
   }
 
