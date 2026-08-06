@@ -35,6 +35,12 @@ export async function POST(request: NextRequest) {
         OR: [
           { status: VideoProxyStatus.PENDING },
           { status: VideoProxyStatus.PROCESSING, claimedAt: { lt: staleBefore } },
+          // A reported failure is retryable until it has used its attempts.
+          // Without this, MAX_ATTEMPTS only ever governed stale-claim reclaims
+          // and one transient blip (a 500 on the upload leg, a B2 hiccup) cost
+          // that rung permanently — nothing in the system would ever pick it up
+          // again. Genuinely broken sources still stop after MAX_ATTEMPTS.
+          { status: VideoProxyStatus.FAILED },
         ],
       },
       orderBy: { createdAt: 'asc' },
