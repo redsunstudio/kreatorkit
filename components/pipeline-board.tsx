@@ -504,7 +504,7 @@ export function PipelineBoard({
         )}
         <span
           className="inline-flex items-center gap-1"
-          title={`${v.commentCount} comment${v.commentCount === 1 ? '' : 's'} on the active cut`}
+          title={`${v.commentCount} comment${v.commentCount === 1 ? '' : 's'} on this item, across every cut`}
         >
           <MessageSquare className="h-3 w-3" />
           {v.commentCount}

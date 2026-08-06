@@ -40,9 +40,12 @@ function shape(v: {
     workspaceName: v.project.workspace.name,
     workspaceSlug: v.project.workspace.slug,
     versionCount: v._count.versions,
-    // Active-version review feedback — mirrors the pipeline board badge.
-    commentCount: v.versions[0]?._count.comments ?? 0,
-    openComments: v.versions[0]?.comments.length ?? 0,
+    // Review feedback for the WHOLE item, across every cut — mirrors the
+    // pipeline board badge. Counting only the active cut made this read 0 for
+    // an item holding dozens of comments as soon as a new cut landed, which is
+    // exactly how it misled a deploy check into reporting comment loss.
+    commentCount: v.versions.reduce((n, ver) => n + ver._count.comments, 0),
+    openComments: v.versions.reduce((n, ver) => n + ver.comments.length, 0),
   };
 }
 
@@ -69,8 +72,6 @@ export async function GET(request: NextRequest) {
         },
         _count: { select: { versions: true } },
         versions: {
-          where: { isActive: true },
-          take: 1,
           select: {
             _count: { select: { comments: true } },
             comments: { where: { isResolved: false }, select: { id: true } },

@@ -39,56 +39,66 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     status: { notIn: ['ARCHIVED' as const, 'PUBLISHED' as const] },
   };
 
-  const [{ access }, workspace, activeVideos, archivedCount, latestCutRows] = await Promise.all([
-    getWorkspaceAccess(workspaceId, session.user.id),
-    db.workspace.findUnique({
-      where: { id: workspaceId },
-      include: {
-        owner: { select: { id: true, name: true } },
-        members: {
-          where: { userId: session.user.id },
-          select: { role: true },
+  const [{ access }, workspace, activeVideos, archivedCount, latestCutRows, commentRows] =
+    await Promise.all([
+      getWorkspaceAccess(workspaceId, session.user.id),
+      db.workspace.findUnique({
+        where: { id: workspaceId },
+        include: {
+          owner: { select: { id: true, name: true } },
+          members: {
+            where: { userId: session.user.id },
+            select: { role: true },
+          },
+          _count: { select: { projects: true, members: true } },
         },
-        _count: { select: { projects: true, members: true } },
-      },
-    }),
-    db.video.findMany({
-      where: PIPELINE_STATUS_FILTER,
-      orderBy: { updatedAt: 'desc' },
-      take: 300,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        videoType: true,
-        brief: true,
-        projectId: true,
-        thumbnailUrl: true,
-        packagingConfirmedAt: true,
-        membersOnly: true,
-        versions: {
-          where: { isActive: true },
-          orderBy: { versionNumber: 'desc' },
-          take: 1,
-          select: { id: true, thumbnailUrl: true, _count: { select: { comments: true } } },
+      }),
+      db.video.findMany({
+        where: PIPELINE_STATUS_FILTER,
+        orderBy: { updatedAt: 'desc' },
+        take: 300,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          videoType: true,
+          brief: true,
+          projectId: true,
+          thumbnailUrl: true,
+          packagingConfirmedAt: true,
+          membersOnly: true,
+          versions: {
+            where: { isActive: true },
+            orderBy: { versionNumber: 'desc' },
+            take: 1,
+            select: { id: true, thumbnailUrl: true, _count: { select: { comments: true } } },
+          },
+          _count: { select: { versions: true } },
         },
-        _count: { select: { versions: true } },
-      },
-    }),
-    db.video.count({ where: { project: { workspaceId }, status: 'ARCHIVED' } }),
-    // Newest cut per item — the ACTIVE version is not always the latest upload,
-    // so this stays a separate aggregate. Filtering by the same relation as the
-    // item query (rather than by a list of ids it returns) is what lets it ride
-    // along in this batch instead of waiting for a second round trip.
-    // NB: on VideoVersion the parent relation is videoParentId — `videoId` is
-    // the PROVIDER's id (YouTube id / storage key) and groups to garbage keys
-    // that never match Video.id.
-    db.videoVersion.groupBy({
-      by: ['videoParentId'],
-      where: { video: PIPELINE_STATUS_FILTER },
-      _max: { createdAt: true },
-    }),
-  ]);
+      }),
+      db.video.count({ where: { project: { workspaceId }, status: 'ARCHIVED' } }),
+      // Newest cut per item — the ACTIVE version is not always the latest upload,
+      // so this stays a separate aggregate. Filtering by the same relation as the
+      // item query (rather than by a list of ids it returns) is what lets it ride
+      // along in this batch instead of waiting for a second round trip.
+      // NB: on VideoVersion the parent relation is videoParentId — `videoId` is
+      // the PROVIDER's id (YouTube id / storage key) and groups to garbage keys
+      // that never match Video.id.
+      db.videoVersion.groupBy({
+        by: ['videoParentId'],
+        where: { video: PIPELINE_STATUS_FILTER },
+        _max: { createdAt: true },
+      }),
+      // Comment totals per ITEM, not per active cut. Comments hang off the cut
+      // they were left on, so counting only the active one made the badge drop to
+      // 0 the moment an editor uploaded a new cut — a client reading the board
+      // after an upload would see their whole review apparently wiped. Summed in
+      // JS because the count lives a relation away from Video.
+      db.videoVersion.findMany({
+        where: { video: PIPELINE_STATUS_FILTER },
+        select: { videoParentId: true, _count: { select: { comments: true } } },
+      }),
+    ]);
 
   if (!workspace || !access) {
     notFound();
@@ -107,6 +117,14 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     latestCutRows.map((r) => [r.videoParentId, r._max.createdAt?.toISOString() ?? null])
   );
 
+  const commentsByVideo = new Map<string, number>();
+  for (const row of commentRows) {
+    commentsByVideo.set(
+      row.videoParentId,
+      (commentsByVideo.get(row.videoParentId) ?? 0) + row._count.comments
+    );
+  }
+
   const pipelineItems = activeVideos.map((v) => ({
     id: v.id,
     title: v.title,
@@ -116,7 +134,7 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     // payload balloon for text nobody can read at this size.
     brief: v.brief ? v.brief.slice(0, BRIEF_PREVIEW_CHARS) : null,
     currentVersion: v._count.versions,
-    commentCount: v.versions[0]?._count.comments ?? 0,
+    commentCount: commentsByVideo.get(v.id) ?? 0,
     projectId: v.projectId,
     latestCutAt: latestCutAtByVideo.get(v.id) ?? null,
     packagingDone: !!v.packagingConfirmedAt,
