@@ -80,8 +80,11 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     // so this stays a separate aggregate. Filtering by the same relation as the
     // item query (rather than by a list of ids it returns) is what lets it ride
     // along in this batch instead of waiting for a second round trip.
+    // NB: on VideoVersion the parent relation is videoParentId — `videoId` is
+    // the PROVIDER's id (YouTube id / storage key) and groups to garbage keys
+    // that never match Video.id.
     db.videoVersion.groupBy({
-      by: ['videoId'],
+      by: ['videoParentId'],
       where: { video: PIPELINE_STATUS_FILTER },
       _max: { createdAt: true },
     }),
@@ -101,7 +104,7 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
   }
 
   const latestCutAtByVideo = new Map(
-    latestCutRows.map((r) => [r.videoId, r._max.createdAt?.toISOString() ?? null])
+    latestCutRows.map((r) => [r.videoParentId, r._max.createdAt?.toISOString() ?? null])
   );
 
   const pipelineItems = activeVideos.map((v) => ({

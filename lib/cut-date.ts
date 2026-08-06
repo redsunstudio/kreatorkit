@@ -35,15 +35,16 @@ export function formatCutDateFull(iso: string): string {
 }
 
 /**
- * "uploaded 3 hours ago" inside the first 24h, then "uploaded 25 Jul".
- * Render with suppressHydrationWarning — the hour count is computed at render
- * time, so server and client can disagree across an hour boundary.
+ * "3 hours ago" inside the first 24h, then "25 Jul" — sits next to a clock
+ * icon, which is what says "upload time". Render with suppressHydrationWarning:
+ * the hour count is computed at render time, so server and client can disagree
+ * across an hour boundary.
  */
 export function formatCutDateRelative(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const hours = Math.floor((Date.now() - d.getTime()) / 3_600_000);
-  if (hours < 0 || hours >= 24) return `uploaded ${formatCutDate(iso)}`;
-  if (hours < 1) return 'uploaded just now';
-  return `uploaded ${hours} hour${hours === 1 ? '' : 's'} ago`;
+  if (hours < 0 || hours >= 24) return formatCutDate(iso);
+  if (hours < 1) return 'just now';
+  return `${hours} hour${hours === 1 ? '' : 's'} ago`;
 }

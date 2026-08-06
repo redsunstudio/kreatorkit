@@ -13,6 +13,7 @@ import {
   Loader2,
   MessageSquare,
   PackageOpen,
+  Clock,
   Play,
   Plus,
   Users,
@@ -504,26 +505,31 @@ export function PipelineBoard({
     );
   }
 
-  // The always-visible middle column on list rows: comment count + when the
-  // latest cut landed ("uploaded 3 hours ago" inside 24h, then the date).
+  // The always-visible middle column on list rows: 🕒 when the latest cut
+  // landed ("3 hours ago" inside 24h, then the date) + 💬 comment count.
+  // Both show whenever the item has a cut — a zero comment count is
+  // information too (John: "comment logo 0"). Idea items have neither.
   function RowActivity({ v }: { v: PipelineVideo }) {
+    if (v.currentVersion === 0) return null;
     return (
       <span className="inline-flex items-center gap-3 justify-self-end text-xs text-muted-foreground font-mono whitespace-nowrap">
-        {v.commentCount > 0 && (
-          <span className="inline-flex items-center gap-1">
-            <MessageSquare className="h-3 w-3" />
-            {v.commentCount}
-          </span>
-        )}
         {v.latestCutAt && (
           <span
             suppressHydrationWarning
-            className="text-muted-foreground/70"
-            title={formatCutDateFull(v.latestCutAt)}
+            className="inline-flex items-center gap-1"
+            title={`Latest cut uploaded ${formatCutDateFull(v.latestCutAt)}`}
           >
+            <Clock className="h-3 w-3" />
             {formatCutDateRelative(v.latestCutAt)}
           </span>
         )}
+        <span
+          className="inline-flex items-center gap-1"
+          title={`${v.commentCount} comment${v.commentCount === 1 ? '' : 's'} on the active cut`}
+        >
+          <MessageSquare className="h-3 w-3" />
+          {v.commentCount}
+        </span>
       </span>
     );
   }
