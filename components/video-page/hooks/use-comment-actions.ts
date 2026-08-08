@@ -238,6 +238,35 @@ export function useCommentActions({
       setIsSubmittingComment(true);
       isMutatingRef.current = true;
 
+      // On any failure, put everything the reviewer typed/staged back in the
+      // composer and say why. Losing a client's written feedback silently is
+      // the one unforgivable failure mode here (Patti/ARM, 29 Jul).
+      const restoreFailedComment = (failedTempId: string, serverError?: string) => {
+        setVideo((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            versions: prev.versions.map((v) =>
+              v.id === activeVersionId
+                ? { ...v, comments: v.comments.filter((c) => c.id !== failedTempId) }
+                : v
+            ),
+          };
+        });
+        setCommentText(commentText);
+        if (imageBlob) setImageBlob(imageBlob);
+        if (effectiveStrokes) setAnnotationStrokes(effectiveStrokes);
+        if (commentRangeStart !== null) {
+          setCommentRangeStart(commentRangeStart);
+          setCommentRangeEnd(commentRangeEnd);
+        }
+        if (selectedTagId) setSelectedTagId(selectedTagId);
+        toast.error(serverError || 'Comment failed to send', {
+          description: 'Your comment was NOT saved. It has been restored below - press Send again.',
+          duration: 10000,
+        });
+      };
+
       try {
         let imageData: { url: string } | undefined;
 
@@ -301,32 +330,11 @@ export function useCommentActions({
             void fetchAssets();
           }
         } else {
-          setVideo((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              versions: prev.versions.map((v) =>
-                v.id === activeVersionId
-                  ? { ...v, comments: v.comments.filter((c) => c.id !== tempId) }
-                  : v
-              ),
-            };
-          });
-          toast.error('Failed to add comment');
+          const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+          restoreFailedComment(tempId, payload?.error);
         }
       } catch {
-        setVideo((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            versions: prev.versions.map((v) =>
-              v.id === activeVersionId
-                ? { ...v, comments: v.comments.filter((c) => c.id !== tempId) }
-                : v
-            ),
-          };
-        });
-        toast.error('Failed to add comment');
+        restoreFailedComment(tempId);
       } finally {
         setIsSubmittingComment(false);
         setIsUploadingImage(false);
@@ -694,6 +702,40 @@ export function useCommentActions({
       setIsSubmittingReply(true);
       isMutatingRef.current = true;
 
+      // Mirror of restoreFailedComment: a failed reply goes back in the
+      // composer with the reason, never into the void.
+      const restoreFailedReply = (failedTempId: string, serverError?: string) => {
+        setVideo((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            versions: prev.versions.map((v) =>
+              v.id === activeVersionId
+                ? {
+                    ...v,
+                    comments: v.comments.map((c) =>
+                      c.id === parentId
+                        ? { ...c, replies: (c.replies || []).filter((r) => r.id !== failedTempId) }
+                        : c
+                    ),
+                  }
+                : v
+            ),
+          };
+        });
+        setReplyText(replyText);
+        setReplyingTo(parentId);
+        if (replyImageBlob) setReplyImageBlob(replyImageBlob);
+        if (replyRangeStart !== null) {
+          setReplyRangeStart(replyRangeStart);
+          setReplyRangeEnd(replyRangeEnd);
+        }
+        toast.error(serverError || 'Reply failed to send', {
+          description: 'Your reply was NOT saved. It has been restored below - press Send again.',
+          duration: 10000,
+        });
+      };
+
       try {
         let submittedImageData: { url: string } | undefined = imageData;
 
@@ -761,46 +803,11 @@ export function useCommentActions({
             void fetchAssets();
           }
         } else {
-          setVideo((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              versions: prev.versions.map((v) =>
-                v.id === activeVersionId
-                  ? {
-                      ...v,
-                      comments: v.comments.map((c) =>
-                        c.id === parentId
-                          ? { ...c, replies: (c.replies || []).filter((r) => r.id !== tempId) }
-                          : c
-                      ),
-                    }
-                  : v
-              ),
-            };
-          });
-          toast.error('Failed to add reply');
+          const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+          restoreFailedReply(tempId, payload?.error);
         }
       } catch {
-        setVideo((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            versions: prev.versions.map((v) =>
-              v.id === activeVersionId
-                ? {
-                    ...v,
-                    comments: v.comments.map((c) =>
-                      c.id === parentId
-                        ? { ...c, replies: (c.replies || []).filter((r) => r.id !== tempId) }
-                        : c
-                    ),
-                  }
-                : v
-            ),
-          };
-        });
-        toast.error('Failed to add reply');
+        restoreFailedReply(tempId);
       } finally {
         setIsSubmittingReply(false);
         setIsUploadingReplyImage(false);

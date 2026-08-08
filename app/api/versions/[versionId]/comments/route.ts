@@ -132,7 +132,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const comments = await db.comment.findMany({
+    const rawComments = await db.comment.findMany({
       where: commentsFilter,
       orderBy: { timestamp: 'asc' },
       skip: offset,
@@ -152,6 +152,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         annotationData: true,
         parentId: true,
         authorId: true,
+        guestIdentityId: true,
         tagId: true,
         versionId: true,
         guestName: true,
@@ -174,6 +175,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             annotationData: true,
             parentId: true,
             authorId: true,
+            guestIdentityId: true,
             tagId: true,
             versionId: true,
             guestName: true,
@@ -183,6 +185,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    // canEdit/canDelete per viewer, same rules as /api/watch. This GET is what
+    // the 10s comment poll swaps into client state, so omitting these fields
+    // here silently stripped the edit affordance from guests (their comments
+    // have no author row to fall back on) moments after page load.
+    const viewerUserId = userId ?? null;
+    const viewerGuestIdentityId = viewerUserId ? null : getGuestIdentityFromRequest(request);
+    const isProjectOwner = viewerUserId === project.ownerId;
+    const withPermissions = (row: { authorId: string | null; guestIdentityId: string | null }) => {
+      const canEdit = viewerUserId
+        ? row.authorId === viewerUserId
+        : !!viewerGuestIdentityId &&
+          !!row.guestIdentityId &&
+          row.guestIdentityId === viewerGuestIdentityId;
+      return { canEdit, canDelete: canEdit || isProjectOwner };
+    };
+    const comments = rawComments.map(({ guestIdentityId, replies, ...comment }) => ({
+      ...comment,
+      ...withPermissions({ authorId: comment.authorId, guestIdentityId }),
+      replies: replies.map(({ guestIdentityId: replyGuestIdentityId, ...reply }) => ({
+        ...reply,
+        ...withPermissions({ authorId: reply.authorId, guestIdentityId: replyGuestIdentityId }),
+      })),
+    }));
 
     const response = successResponse({
       comments,
@@ -290,10 +316,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         };
       }
 
+      // Clamp instead of rejecting: at the end of playback the player's
+      // currentTime routinely lands a fraction past the probed duration we
+      // store, and rejecting that 400'd real client feedback into the void
+      // (Patti/ARM, 29 Jul). Any overshoot means "at the very end".
       if (maxTimestamp !== null && parsed > maxTimestamp) {
-        return {
-          error: apiErrors.badRequest(`${fieldName} must be less than or equal to video duration`),
-        };
+        return { value: maxTimestamp };
       }
 
       return { value: parsed };
