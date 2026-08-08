@@ -57,12 +57,20 @@ function resolveTrustedClientIp(request: Request): string | null {
   const cfIp = getCloudflareClientIp(request);
   if (cfIp) return cfIp;
 
-  // In production, require Cloudflare-provided client IP to avoid spoofable header fallbacks.
+  // No Cloudflare fronts this deployment (Railway edge only), so requiring
+  // cf-connecting-ip in production 403'd EVERY guest image/voice upload -
+  // "cannot attach an image to a comment" (Patti/ARM, 29 Jul). Fall back to
+  // the same TRUSTED_PROXY_MODE-aware resolution the rest of the app rate
+  // limits with; its headers are proxy-set and equally non-spoofable.
+  const proxyIp = getClientIp(request);
+  if (proxyIp && proxyIp !== '127.0.0.1') return proxyIp;
+
+  // Fail closed in production when no trusted proxy is configured at all.
   if (process.env.NODE_ENV === 'production') {
     return null;
   }
 
-  return getClientIp(request);
+  return proxyIp;
 }
 
 function isValidPayload(value: unknown): value is GuestUploadTokenPayload {
