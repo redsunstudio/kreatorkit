@@ -29,16 +29,31 @@ const SAFE_IMAGE_PATH =
   /^\/api\/upload\/image\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 const SAFE_AUDIO_PATH =
   /^\/api\/upload\/audio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
+const SAFE_FILE_PATH =
+  /^\/api\/upload\/file\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 const UNATTACHED_UPLOAD_TTL_MS = 15 * 60 * 1000;
 
 type AttachmentCheck = { isFresh: boolean; sizeBytes: bigint };
 
-async function isFreshAttachment(url: string, kind: 'audio' | 'image'): Promise<AttachmentCheck> {
-  const prefix = kind === 'audio' ? '/api/upload/audio/' : '/api/upload/image/';
+async function isFreshAttachment(
+  url: string,
+  kind: 'audio' | 'image' | 'file'
+): Promise<AttachmentCheck> {
+  const prefix =
+    kind === 'audio'
+      ? '/api/upload/audio/'
+      : kind === 'image'
+        ? '/api/upload/image/'
+        : '/api/upload/file/';
   if (!url.startsWith(prefix)) return { isFresh: false, sizeBytes: BigInt(0) };
 
   const filename = url.slice(prefix.length);
-  const key = kind === 'audio' ? `voice/${filename}` : `images/${filename}`;
+  const key =
+    kind === 'audio'
+      ? `voice/${filename}`
+      : kind === 'image'
+        ? `images/${filename}`
+        : `comment-files/${filename}`;
 
   try {
     const head = await r2Client.send(
@@ -149,6 +164,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         voiceUrl: true,
         voiceDuration: true,
         imageUrl: true,
+        fileUrl: true,
+        fileName: true,
         annotationData: true,
         parentId: true,
         authorId: true,
@@ -172,6 +189,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             voiceUrl: true,
             voiceDuration: true,
             imageUrl: true,
+            fileUrl: true,
+            fileName: true,
             annotationData: true,
             parentId: true,
             authorId: true,
@@ -295,6 +314,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       guestEmail,
       tagId,
       imageUrl,
+      fileUrl,
+      fileName,
       annotationData,
     } = body;
 
@@ -345,9 +366,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (!content && !voiceUrl && !imageUrl && !annotationData) {
+    if (!content && !voiceUrl && !imageUrl && !fileUrl && !annotationData) {
       return apiErrors.badRequest(
-        'Either content, a voice recording, an image attachment, or an annotation is required'
+        'Either content, a voice recording, an attachment, or an annotation is required'
       );
     }
 
@@ -435,12 +456,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       imageSizeBytes = imageCheck.sizeBytes;
     }
 
+    if (fileUrl && !SAFE_FILE_PATH.test(fileUrl)) {
+      return apiErrors.badRequest('File URL must reference an uploaded file');
+    }
+    if (fileName !== undefined && fileName !== null && String(fileName).length > 200) {
+      return apiErrors.badRequest('File name must be 200 characters or fewer');
+    }
+    let fileSizeBytes = BigInt(0);
+    if (fileUrl) {
+      const fileCheck = await isFreshAttachment(fileUrl, 'file');
+      if (!fileCheck.isFresh) {
+        return apiErrors.badRequest('File upload expired. Please upload again.');
+      }
+      fileSizeBytes = fileCheck.sizeBytes;
+    }
+
     const guestIdentity = isGuest ? ensureGuestIdentityFromRequest(request) : null;
 
     // Enforce per-workspace storage quota for any R2 attachments on this comment.
     // Uses the advisory-locked reservation path so concurrent comment submissions
     // see each other's in-flight sizes, eliminating the TOCTOU race.
-    const totalAttachmentBytes = voiceSizeBytes + imageSizeBytes;
+    const totalAttachmentBytes = voiceSizeBytes + imageSizeBytes + fileSizeBytes;
     if (totalAttachmentBytes > BigInt(0)) {
       const reserveResult = await reserveStorageQuota(
         project.workspace.ownerId,
@@ -467,6 +503,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           voiceUrl: voiceUrl || null,
           voiceDuration: voiceDuration || null,
           imageUrl: imageUrl || null,
+          fileUrl: fileUrl || null,
+          fileName: fileUrl ? String(fileName || '').trim() || null : null,
           annotationData: serializedAnnotationData,
           authorId: session?.user?.id || null,
           guestName: isGuest ? guestName : null,
@@ -502,6 +540,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             sourceUrl: imageUrl,
             thumbnailUrl: imageUrl,
             sizeBytes: imageSizeBytes,
+            uploadedByUserId: session?.user?.id || null,
+            uploadedByGuestIdentityId: isGuest ? (guestIdentity?.identityId ?? null) : null,
+            uploadedByGuestName: isGuest ? safeGuestName : null,
+            billedUserId: project.workspace.ownerId,
+          },
+        });
+      }
+
+      // If a generic file was attached, also add it to the assets pane.
+      // sourceUrl is the RAW object key, matching how R2_FILE assets are
+      // stored everywhere else (download route + cleanup both expect keys).
+      if (fileUrl) {
+        const storedFilename = String(fileUrl).slice('/api/upload/file/'.length);
+        const displayName = sanitizeAssetDisplayName(
+          typeof fileName === 'string' ? fileName : null,
+          storedFilename || 'Comment File'
+        );
+        const safeGuestName = sanitizeAssetDisplayName(guestName, 'Guest').slice(0, 80);
+
+        await tx.videoAsset.create({
+          data: {
+            videoId: version.video.id,
+            kind: 'FILE',
+            provider: 'R2_FILE',
+            displayName,
+            sourceUrl: `comment-files/${storedFilename}`,
+            sizeBytes: fileSizeBytes,
             uploadedByUserId: session?.user?.id || null,
             uploadedByGuestIdentityId: isGuest ? (guestIdentity?.identityId ?? null) : null,
             uploadedByGuestName: isGuest ? safeGuestName : null,
@@ -560,7 +625,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           projectName: project.name,
           videoTitle,
           replyAuthor: commentAuthorName,
-          replyText: content?.trim() || (imageUrl ? '(image attachment)' : '(voice note)'),
+          replyText:
+            content?.trim() ||
+            (imageUrl ? '(image attachment)' : fileUrl ? '(file attachment)' : '(voice note)'),
           parentAuthor: parentComment?.author?.name || parentComment?.guestName || 'Someone',
           timestamp: ts,
           url: `${baseUrl}/watch/${version.video.id}`,
@@ -571,7 +638,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           projectName: project.name,
           videoTitle,
           commentAuthor: commentAuthorName,
-          commentText: content?.trim() || (imageUrl ? '(image attachment)' : '(voice note)'),
+          commentText:
+            content?.trim() ||
+            (imageUrl ? '(image attachment)' : fileUrl ? '(file attachment)' : '(voice note)'),
           timestamp: ts,
           url: `${baseUrl}/watch/${version.video.id}`,
         }).catch((err) => logError('Notification failed:', err));

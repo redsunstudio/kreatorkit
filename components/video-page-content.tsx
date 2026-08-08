@@ -525,6 +525,11 @@ export function VideoPageContent({
     clearCommentRangeSelection,
     isUploadingImage,
     imageInputRef,
+    fileBlob,
+    setFileBlob,
+    isUploadingFile,
+    fileInputRef,
+    handleFileSelect,
     handleAddComment,
     handleImageSelect,
     handlePaste,
@@ -1110,6 +1115,11 @@ export function VideoPageContent({
               imageBlob={imageBlob}
               imageInputRef={imageInputRef}
               setImageBlob={setImageBlob}
+              fileBlob={fileBlob}
+              fileInputRef={fileInputRef}
+              setFileBlob={setFileBlob}
+              handleFileSelect={handleFileSelect}
+              isUploadingFile={isUploadingFile}
               commentText={commentText}
               setCommentText={setCommentText}
               commentRangeStart={commentRangeStart}

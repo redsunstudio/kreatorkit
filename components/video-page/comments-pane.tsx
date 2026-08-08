@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Download,
   FolderOpen,
   Image as ImageIcon,
   Loader2,
   MessageSquare,
   Mic,
   MoreVertical,
+  Paperclip,
   Pause,
   Pencil,
   Play,
@@ -584,6 +586,19 @@ export const CommentsPane = memo(function CommentsPane({
                             />
                           </div>
                         )}
+                        {comment.fileUrl && (
+                          <a
+                            href={comment.fileUrl}
+                            className="flex items-center gap-2 p-2 bg-muted rounded mb-2 hover:bg-muted-foreground/10 transition-colors"
+                            download={comment.fileName || undefined}
+                          >
+                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-xs font-medium truncate">
+                              {comment.fileName || 'Attached file'}
+                            </span>
+                            <Download className="h-3.5 w-3.5 text-muted-foreground ml-auto shrink-0" />
+                          </a>
+                        )}
                       </div>
                     )}
 
@@ -789,6 +804,19 @@ export const CommentsPane = memo(function CommentsPane({
                                         className="max-h-40 w-auto object-contain"
                                       />
                                     </div>
+                                  )}
+                                  {reply.fileUrl && (
+                                    <a
+                                      href={reply.fileUrl}
+                                      className="flex items-center gap-2 p-1.5 bg-muted rounded mt-2 hover:bg-muted-foreground/10 transition-colors"
+                                      download={reply.fileName || undefined}
+                                    >
+                                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      <span className="text-xs font-medium truncate">
+                                        {reply.fileName || 'Attached file'}
+                                      </span>
+                                      <Download className="h-3.5 w-3.5 text-muted-foreground ml-auto shrink-0" />
+                                    </a>
                                   )}
                                 </div>
                               )}

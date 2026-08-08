@@ -48,8 +48,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { videoId } = await params;
     const body = await request.json().catch(() => ({}));
     const intent = body?.intent;
-    if (intent !== 'audio' && intent !== 'image') {
-      return apiErrors.badRequest('intent must be "audio" or "image"');
+    if (intent !== 'audio' && intent !== 'image' && intent !== 'file') {
+      return apiErrors.badRequest('intent must be "audio", "image" or "file"');
     }
 
     const video = await db.video.findUnique({

@@ -17,6 +17,8 @@ const commentSelect = {
   resolvedAt: true,
   voiceUrl: true,
   imageUrl: true,
+  fileUrl: true,
+  fileName: true,
   annotationData: true,
   guestName: true,
   createdAt: true,
@@ -34,6 +36,8 @@ function shapeComment(c: {
   resolvedAt: Date | null;
   voiceUrl: string | null;
   imageUrl: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
   annotationData: string | null;
   guestName: string | null;
   createdAt: Date;
@@ -50,6 +54,8 @@ function shapeComment(c: {
     resolvedAt: c.resolvedAt?.toISOString() ?? null,
     hasVoice: !!c.voiceUrl,
     hasImage: !!c.imageUrl,
+    hasFile: !!c.fileUrl,
+    fileName: c.fileName,
     hasAnnotation: !!c.annotationData,
     authorName: c.author?.name ?? c.guestName ?? 'Guest',
     isTeam: !!c.author, // registered users are team; guests came via a share link

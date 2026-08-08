@@ -87,6 +87,8 @@ export interface CommentReply {
   voiceUrl: string | null;
   voiceDuration: number | null;
   imageUrl: string | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
   annotationData: string | null;
   createdAt: string;
   author: { id: string; name: string | null; image: string | null } | null;
@@ -104,6 +106,8 @@ export interface Comment {
   voiceUrl: string | null;
   voiceDuration: number | null;
   imageUrl: string | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
   annotationData: string | null;
   isResolved: boolean;
   createdAt: string;

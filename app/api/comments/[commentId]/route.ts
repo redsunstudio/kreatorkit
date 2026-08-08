@@ -282,7 +282,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
-        replies: { select: { voiceUrl: true, imageUrl: true } },
+        replies: { select: { voiceUrl: true, imageUrl: true, fileUrl: true } },
       },
     });
 
@@ -340,9 +340,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const mediaUrls: string[] = [];
     if (comment.voiceUrl) mediaUrls.push(comment.voiceUrl);
     if (comment.imageUrl) mediaUrls.push(comment.imageUrl);
+    if (comment.fileUrl) mediaUrls.push(comment.fileUrl);
     for (const reply of comment.replies) {
       if (reply.voiceUrl) mediaUrls.push(reply.voiceUrl);
       if (reply.imageUrl) mediaUrls.push(reply.imageUrl);
+      if (reply.fileUrl) mediaUrls.push(reply.fileUrl);
     }
 
     await db.comment.delete({ where: { id: commentId } });
@@ -350,6 +352,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Clean up media files from R2 (best-effort, don't block on failure)
     const AUDIO_PREFIX = '/api/upload/audio/';
     const IMAGE_PREFIX = '/api/upload/image/';
+    const FILE_PREFIX = '/api/upload/file/';
     const mediaKeys = [
       ...new Set(
         mediaUrls
@@ -362,6 +365,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             if (url.includes(IMAGE_PREFIX)) {
               const filename = url.slice(url.indexOf(IMAGE_PREFIX) + IMAGE_PREFIX.length);
               return filename ? `images/${filename}` : null;
+            }
+            if (url.includes(FILE_PREFIX)) {
+              const filename = url.slice(url.indexOf(FILE_PREFIX) + FILE_PREFIX.length);
+              return filename ? `comment-files/${filename}` : null;
             }
             return null;
           })

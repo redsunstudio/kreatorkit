@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Mic,
+  Paperclip,
   Pause,
   Pencil,
   Play,
@@ -35,6 +36,11 @@ interface CommentComposerProps {
   imageBlob: File | null;
   imageInputRef: RefObject<HTMLInputElement | null>;
   setImageBlob: (blob: File | null) => void;
+  fileBlob: File | null;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  setFileBlob: (blob: File | null) => void;
+  handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isUploadingFile: boolean;
   commentText: string;
   setCommentText: (value: string) => void;
   commentRangeStart: number | null;
@@ -78,6 +84,11 @@ export const CommentComposer = memo(function CommentComposer({
   imageBlob,
   imageInputRef,
   setImageBlob,
+  fileBlob,
+  fileInputRef,
+  setFileBlob,
+  handleFileSelect,
+  isUploadingFile,
   commentText,
   setCommentText,
   commentRangeStart,
@@ -118,7 +129,12 @@ export const CommentComposer = memo(function CommentComposer({
   // Collapsed at rest so the comment list gets the space; expands while the
   // reviewer is composing or has anything staged.
   const isExpanded =
-    isFocused || !!commentText.trim() || !!imageBlob || !!annotationStrokes || hasCommentRange;
+    isFocused ||
+    !!commentText.trim() ||
+    !!imageBlob ||
+    !!fileBlob ||
+    !!annotationStrokes ||
+    hasCommentRange;
   const commentRangeLabel =
     commentRangeStart !== null
       ? commentRangeEnd !== null
@@ -298,10 +314,25 @@ export const CommentComposer = memo(function CommentComposer({
               </div>
             </div>
           )}
-          <div
-            onFocusCapture={() => setIsFocused(true)}
-            onBlurCapture={() => setIsFocused(false)}
-          >
+          {fileBlob && (
+            <div className="flex items-center gap-2 px-2 py-1.5 mb-2 rounded-md bg-muted border">
+              <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs font-medium truncate">{fileBlob.name}</span>
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                {(fileBlob.size / (1024 * 1024)).toFixed(1)}MB
+              </span>
+              <button
+                className="ml-auto text-xs text-muted-foreground hover:text-destructive transition-colors"
+                onClick={() => {
+                  setFileBlob(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+          <div onFocusCapture={() => setIsFocused(true)} onBlurCapture={() => setIsFocused(false)}>
             {isExpanded && (
               <div className="mb-2 flex items-center gap-2 flex-wrap">
                 <Button
@@ -364,6 +395,21 @@ export const CommentComposer = memo(function CommentComposer({
               >
                 <ImageIcon className="h-4 w-4" />
               </Button>
+              <Button
+                size="icon"
+                variant={fileBlob ? 'default' : 'ghost'}
+                className="h-8 w-8"
+                onClick={() => fileInputRef.current?.click()}
+                title="Attach File (PDF, doc, ... - max 25MB)"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+              <input
+                type="file"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+              />
               <Button
                 size="icon"
                 variant={annotationStrokes ? 'default' : 'ghost'}
@@ -451,12 +497,13 @@ export const CommentComposer = memo(function CommentComposer({
                 className="h-8"
                 onClick={handleAddComment}
                 disabled={
-                  (!commentText.trim() && !imageBlob && !annotationStrokes) ||
+                  (!commentText.trim() && !imageBlob && !fileBlob && !annotationStrokes) ||
                   isSubmittingComment ||
-                  isUploadingImage
+                  isUploadingImage ||
+                  isUploadingFile
                 }
               >
-                {isSubmittingComment || isUploadingImage ? (
+                {isSubmittingComment || isUploadingImage || isUploadingFile ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>

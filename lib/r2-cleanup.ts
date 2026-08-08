@@ -14,6 +14,10 @@ const SAFE_IMAGE_PATH =
   /^\/api\/upload\/image\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 const SAFE_AUDIO_PATH =
   /^\/api\/upload\/audio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
+/** The path prefix for comment file attachments served by the upload API. */
+const FILE_PATH_PREFIX = '/api/upload/file/';
+const SAFE_FILE_PATH =
+  /^\/api\/upload\/file\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 
 export interface R2CleanupResult {
   attempted: number;
@@ -27,7 +31,7 @@ export interface R2CleanupResult {
  */
 export function mediaUrlToKey(url: string): string | null {
   // KreatorKit generic file assets store the raw object key.
-  if (/^files\/[A-Za-z0-9._()-]+$/.test(url)) {
+  if (/^(files|comment-files)\/[A-Za-z0-9._()-]+$/.test(url)) {
     return url;
   }
   // Proxy renditions are collected as raw object keys too (proxies/{versionId}/{h}p.mp4).
@@ -40,6 +44,9 @@ export function mediaUrlToKey(url: string): string | null {
   } else if (SAFE_IMAGE_PATH.test(url)) {
     const filename = url.slice(IMAGE_PATH_PREFIX.length);
     return filename ? `images/${filename}` : null;
+  } else if (SAFE_FILE_PATH.test(url)) {
+    const filename = url.slice(FILE_PATH_PREFIX.length);
+    return filename ? `comment-files/${filename}` : null;
   }
 
   return videoProxyPathToObjectKey(url);

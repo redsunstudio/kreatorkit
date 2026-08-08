@@ -75,7 +75,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (asset.provider === VideoAssetProvider.R2_FILE) {
       const key = asset.sourceUrl;
-      if (!key || !key.startsWith('files/')) {
+      // comment-files/ = generic files attached to review comments; same raw-key
+      // convention as files/ (footage-handoff uploads).
+      if (!key || !(key.startsWith('files/') || key.startsWith('comment-files/'))) {
         return apiErrors.badRequest('Invalid file asset');
       }
       const ext = key.includes('.') ? key.slice(key.lastIndexOf('.')) : '';

@@ -712,6 +712,10 @@ model Comment {
   // Image attachment (optional)
   imageUrl String? // URL to uploaded image file
 
+  // Generic file attachment (optional) — PDFs, docs etc. a reviewer attaches
+  fileUrl  String? // Proxy URL to the uploaded file (/api/upload/file/{uuid}.{ext})
+  fileName String? // Original name, shown on the download chip
+
   // Annotation drawing data (JSON string of strokes)
   annotationData String? @db.Text
 
@@ -747,6 +751,7 @@ model Comment {
 
   @@unique([imageUrl])
   @@unique([voiceUrl])
+  @@unique([fileUrl])
   @@index([versionId])
   @@index([parentId])
   @@index([authorId])

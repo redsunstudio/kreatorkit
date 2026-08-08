@@ -51,6 +51,9 @@ interface UseCommentActionsParams extends CommentActionsConfig {
   fetchAssets: () => Promise<void>;
 }
 
+// Server cap on /api/upload/file - mirrored here so oversize picks fail fast.
+const MAX_ATTACHMENT_FILE_SIZE = 25 * 1024 * 1024;
+
 function getAudioUploadFilename(blob: Blob): string {
   const mime = blob.type.split(';')[0].trim().toLowerCase();
   if (mime === 'audio/mp4') return 'recording.m4a';
@@ -91,9 +94,12 @@ export function useCommentActions({
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [imageBlob, setImageBlob] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [fileBlob, setFileBlob] = useState<File | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [commentRangeStart, setCommentRangeStart] = useState<number | null>(null);
   const [commentRangeEnd, setCommentRangeEnd] = useState<number | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -159,7 +165,7 @@ export function useCommentActions({
   }, [currentTime, replyRangeEnd, replyRangeStart]);
 
   const getGuestUploadToken = useCallback(
-    async (intent: 'audio' | 'image') => {
+    async (intent: 'audio' | 'image' | 'file') => {
       if (!isGuest) return null;
 
       const response = await fetch(`/api/watch/${videoId}/upload-token`, {
@@ -182,7 +188,14 @@ export function useCommentActions({
 
   const handleAddComment = useCallback(
     async (voiceData?: { url: string; duration: number }) => {
-      if (!voiceData && !imageBlob && !commentText.trim() && !annotationStrokes && !isAnnotating)
+      if (
+        !voiceData &&
+        !imageBlob &&
+        !fileBlob &&
+        !commentText.trim() &&
+        !annotationStrokes &&
+        !isAnnotating
+      )
         return;
       if (!activeVersion || !activeVersionId) return;
 
@@ -199,12 +212,14 @@ export function useCommentActions({
       const serializedAnnotation = effectiveStrokes ? JSON.stringify(effectiveStrokes) : null;
       const optimisticComment: Comment = {
         id: tempId,
-        content: voiceData || imageBlob ? commentText.trim() || null : commentText,
+        content: voiceData || imageBlob || fileBlob ? commentText.trim() || null : commentText,
         timestamp: commentTimestamp,
         timestampEnd: commentRangeEnd,
         voiceUrl: voiceData?.url ?? null,
         voiceDuration: voiceData?.duration ?? null,
         imageUrl: imageBlob ? URL.createObjectURL(imageBlob) : null,
+        fileUrl: fileBlob ? URL.createObjectURL(fileBlob) : null,
+        fileName: fileBlob ? fileBlob.name : null,
         annotationData: serializedAnnotation,
         isResolved: false,
         createdAt: new Date().toISOString(),
@@ -230,6 +245,7 @@ export function useCommentActions({
       setSelectedTagId(availableTags.length > 0 ? availableTags[0].id : null);
       setAudioBlob(null);
       setImageBlob(null);
+      setFileBlob(null);
       setAnnotationStrokes(null);
       setIsAnnotating(false);
       clearCommentRangeSelection();
@@ -255,6 +271,7 @@ export function useCommentActions({
         });
         setCommentText(commentText);
         if (imageBlob) setImageBlob(imageBlob);
+        if (fileBlob) setFileBlob(fileBlob);
         if (effectiveStrokes) setAnnotationStrokes(effectiveStrokes);
         if (commentRangeStart !== null) {
           setCommentRangeStart(commentRangeStart);
@@ -288,15 +305,36 @@ export function useCommentActions({
           imageData = { url: imageDataResponse.data.url };
         }
 
+        let fileData: { url: string; name: string } | undefined;
+
+        if (fileBlob) {
+          setIsUploadingFile(true);
+          const fileFormData = new FormData();
+          fileFormData.append('file', fileBlob);
+          fileFormData.append('videoId', videoId);
+          const fileUploadToken = await getGuestUploadToken('file');
+          if (fileUploadToken) fileFormData.append('uploadToken', fileUploadToken);
+
+          const fileRes = await fetch('/api/upload/file', {
+            method: 'POST',
+            body: fileFormData,
+          });
+
+          if (!fileRes.ok) throw new Error('Failed to upload file');
+          const fileDataResponse = await fileRes.json();
+          fileData = { url: fileDataResponse.data.url, name: fileBlob.name };
+        }
+
         const res = await fetch(`/api/versions/${activeVersion.id}/comments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content: voiceData || imageBlob ? commentText.trim() || null : commentText,
+            content: voiceData || imageBlob || fileBlob ? commentText.trim() || null : commentText,
             timestamp: commentTimestamp,
             ...(commentRangeEnd !== null && { timestampEnd: commentRangeEnd }),
             ...(voiceData && { voiceUrl: voiceData.url, voiceDuration: voiceData.duration }),
             ...(imageData && { imageUrl: imageData.url }),
+            ...(fileData && { fileUrl: fileData.url, fileName: fileData.name }),
             ...(isGuest && normalizedGuestName && { guestName: normalizedGuestName }),
             ...(selectedTagId && { tagId: selectedTagId }),
             ...(effectiveStrokes && { annotationData: effectiveStrokes }),
@@ -325,8 +363,8 @@ export function useCommentActions({
             };
           });
 
-          // If an image was attached, refresh the assets list
-          if (imageData) {
+          // If an attachment was added, refresh the assets list
+          if (imageData || fileData) {
             void fetchAssets();
           }
         } else {
@@ -338,6 +376,7 @@ export function useCommentActions({
       } finally {
         setIsSubmittingComment(false);
         setIsUploadingImage(false);
+        setIsUploadingFile(false);
         isMutatingRef.current = false;
       }
     },
@@ -354,6 +393,7 @@ export function useCommentActions({
       selectedTagId,
       availableTags,
       imageBlob,
+      fileBlob,
       annotationStrokes,
       isAnnotating,
       videoId,
@@ -388,6 +428,18 @@ export function useCommentActions({
     },
     []
   );
+
+  const handleFileSelect = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_ATTACHMENT_FILE_SIZE) {
+      toast.error('File too large. Maximum size is 25MB.');
+      return;
+    }
+
+    setFileBlob(file);
+  }, []);
 
   const handlePaste = useCallback(
     async (e: ClipboardEvent<HTMLTextAreaElement>, isReply: boolean = false) => {
@@ -1172,6 +1224,11 @@ export function useCommentActions({
     clearCommentRangeSelection,
     isUploadingImage,
     imageInputRef,
+    fileBlob,
+    setFileBlob,
+    isUploadingFile,
+    fileInputRef,
+    handleFileSelect,
     handleAddComment,
     handleImageSelect,
     handlePaste,

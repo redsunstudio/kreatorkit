@@ -10,7 +10,7 @@ const GUEST_BUNNY_UPLOAD_VIDEO_MAX_REQUESTS = 4;
 const GUEST_UPLOAD_SESSION_WINDOW_MS = 15 * 60 * 1000;
 const GUEST_UPLOAD_SESSION_MAX_REQUESTS = 8;
 
-export type GuestUploadIntent = 'audio' | 'image' | 'bunny';
+export type GuestUploadIntent = 'audio' | 'image' | 'file' | 'bunny';
 
 interface GuestUploadTokenPayload {
   typ: typeof GUEST_UPLOAD_TOKEN_TYPE;
@@ -84,7 +84,10 @@ function isValidPayload(value: unknown): value is GuestUploadTokenPayload {
     Number.isFinite(payload.iat) &&
     typeof payload.exp === 'number' &&
     Number.isFinite(payload.exp) &&
-    (payload.intent === 'audio' || payload.intent === 'image' || payload.intent === 'bunny') &&
+    (payload.intent === 'audio' ||
+      payload.intent === 'image' ||
+      payload.intent === 'file' ||
+      payload.intent === 'bunny') &&
     typeof payload.ctx === 'string'
   );
 }
