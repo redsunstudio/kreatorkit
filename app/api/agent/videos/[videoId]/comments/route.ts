@@ -164,6 +164,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : 'Agency OS';
     const parentId = typeof body?.parentId === 'string' ? body.parentId : null;
     const wantVersionId = typeof body?.versionId === 'string' ? body.versionId : null;
+    // Coloured tag, by NAME. The session route takes a tagId, but an agent has no way to
+    // discover one, and a per-project tag is cheap to find-or-create. `tagColor` only
+    // applies when the tag does not exist yet, so a human renaming or recolouring a tag in
+    // the UI is never overwritten by a later agent post.
+    const tagName =
+      typeof body?.tag === 'string' && body.tag.trim() ? body.tag.trim().slice(0, 40) : null;
+    const tagColor =
+      typeof body?.tagColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.tagColor.trim())
+        ? body.tagColor.trim()
+        : '#F16333';
 
     if (!content) return apiErrors.badRequest('content is required');
     if (!Number.isFinite(timestamp) || timestamp < 0) {
@@ -206,6 +216,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Tags are per PROJECT, so resolve against the project this video belongs to.
+    let tagId: string | null = null;
+    if (tagName) {
+      const owner = await db.video.findUnique({
+        where: { id: videoId },
+        select: { projectId: true },
+      });
+      if (owner?.projectId) {
+        const existing = await db.commentTag.findUnique({
+          where: { projectId_name: { projectId: owner.projectId, name: tagName } },
+          select: { id: true },
+        });
+        tagId =
+          existing?.id ??
+          (
+            await db.commentTag.create({
+              data: { name: tagName, color: tagColor, projectId: owner.projectId },
+              select: { id: true },
+            })
+          ).id;
+      }
+    }
+
     const comment = await db.comment.create({
       data: {
         content,
@@ -214,6 +247,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         parentId,
         guestName: authorName,
         versionId: version.id,
+        tagId,
       },
       select: commentSelect,
     });
