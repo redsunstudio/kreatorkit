@@ -25,7 +25,10 @@ import {
   packagingState,
 } from '@/lib/video-packaging';
 
-export type PublishMode = 'studio' | 'draft' | 'live';
+// 'schedule' = upload now, go public at scheduledFor. Zernio owns the timing; we pass the
+// slot exactly as the LinkedIn path already does (lib/publish-post.ts) and read the slot it
+// echoes back rather than assuming it accepted ours.
+export type PublishMode = 'studio' | 'draft' | 'live' | 'schedule';
 
 export class PublishError extends Error {
   constructor(
@@ -109,9 +112,14 @@ export interface PublishResult {
 
 export async function publishVideoToYouTube(
   videoId: string,
-  opts: { mode?: PublishMode; actorName?: string; force?: boolean } = {}
+  opts: { mode?: PublishMode; actorName?: string; force?: boolean; scheduledFor?: string } = {}
 ): Promise<PublishResult> {
   const mode: PublishMode = opts.mode ?? 'draft';
+  if (mode === 'schedule' && !opts.scheduledFor) {
+    throw new PublishError(
+      "mode 'schedule' needs scheduledFor (ISO 8601, e.g. 2026-08-11T13:00:00Z)"
+    );
+  }
 
   const video = await db.video.findUnique({
     where: { id: videoId },
@@ -239,7 +247,7 @@ export async function publishVideoToYouTube(
   const mediaItems: ZernioMediaItem[] = [
     { type: 'video', url: mediaUrl, ...(thumbnailUrl ? { thumbnail: thumbnailUrl } : {}) },
   ];
-  const { postId } = await zernioCreatePost(
+  const { postId, raw: rawPost } = await zernioCreatePost(
     {
       content: video.description?.trim() || video.brief?.trim() || video.title,
       mediaItems,
@@ -254,10 +262,29 @@ export async function publishVideoToYouTube(
           },
         },
       ],
-      ...(mode === 'draft' ? { isDraft: true } : { publishNow: true }),
+      ...(mode === 'draft'
+        ? { isDraft: true }
+        : mode === 'schedule'
+          ? { scheduledFor: opts.scheduledFor as string }
+          : { publishNow: true }),
     },
     apiKey
   );
+
+  // Trust Zernio's echoed slot over the one we asked for — if it silently ignored or
+  // adjusted scheduledFor, the note must say what will ACTUALLY happen, not what we wanted.
+  const zernioSlot =
+    typeof (rawPost as { scheduledFor?: unknown })?.scheduledFor === 'string'
+      ? (rawPost as { scheduledFor: string }).scheduledFor
+      : typeof (rawPost as { post?: { scheduledFor?: unknown } })?.post?.scheduledFor === 'string'
+        ? (rawPost as { post: { scheduledFor: string } }).post.scheduledFor
+        : null;
+  if (mode === 'schedule' && !zernioSlot) {
+    throw new PublishError(
+      `Zernio accepted the post${postId ? ` (${postId})` : ''} but echoed NO scheduledFor — ` +
+        `it may publish immediately. Check Zernio before assuming it is scheduled.`
+    );
+  }
 
   // Catch instant validation/ingest failures (bad media URL etc). Zernio keeps
   // processing after we return — this only surfaces immediate hard failures.
@@ -284,11 +311,13 @@ export async function publishVideoToYouTube(
 
   const by = opts.actorName ? ` — by ${opts.actorName}` : '';
   const noteBody =
-    mode === 'studio'
-      ? `📺 Pushed to YouTube${postId ? ` (Zernio post ${postId})` : ''}${by}. YouTube is ingesting it now — it appears in YouTube Studio as a PRIVATE video within a few minutes; set it live from Studio when ready.`
-      : mode === 'live'
-        ? `🚀 Published to YouTube via Zernio${postId ? ` (post ${postId})` : ''}${by}`
-        : `📤 Sent to Zernio as a YouTube draft${postId ? ` (post ${postId})` : ''}${by}. Confirm the thumbnail in Zernio before publishing.`;
+    mode === 'schedule'
+      ? `🗓 Scheduled on YouTube for ${zernioSlot ?? opts.scheduledFor}${postId ? ` (Zernio post ${postId})` : ''}${by}`
+      : mode === 'studio'
+        ? `📺 Pushed to YouTube${postId ? ` (Zernio post ${postId})` : ''}${by}. YouTube is ingesting it now — it appears in YouTube Studio as a PRIVATE video within a few minutes; set it live from Studio when ready.`
+        : mode === 'live'
+          ? `🚀 Published to YouTube via Zernio${postId ? ` (post ${postId})` : ''}${by}`
+          : `📤 Sent to Zernio as a YouTube draft${postId ? ` (post ${postId})` : ''}${by}. Confirm the thumbnail in Zernio before publishing.`;
   await db.videoNote.create({ data: { videoId: video.id, body: noteBody } });
 
   await db.video.update({

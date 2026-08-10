@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return withCacheControl(successResponse(result), 'private, no-store');
     }
 
-    const mode: PublishMode = ['studio', 'draft', 'live'].includes(body?.mode)
+    const mode: PublishMode = ['studio', 'draft', 'live', 'schedule'].includes(body?.mode)
       ? body.mode
       : body?.publishNow === true
         ? 'live'
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       mode,
       force: body?.force === true,
       actorName: 'Agency OS',
+      scheduledFor: typeof body?.scheduledFor === 'string' ? body.scheduledFor : undefined,
     });
     return withCacheControl(successResponse(result), 'private, no-store');
   } catch (error) {
