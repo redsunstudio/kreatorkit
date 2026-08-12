@@ -47,7 +47,11 @@ function imageContentTypeFromFileName(fileName: string): string {
 // GET /api/videos/[videoId]/assets/[assetId]/download
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const limited = await rateLimit(request, 'asset-download');
+    // Thumbnails (?inline=1) and real downloads share this route but not the
+    // budget: a pipeline board paints dozens of inline requests at once, while
+    // the strict download limit exists to stop multi-GB footage abuse.
+    const isInlineView = request.nextUrl.searchParams.get('inline') === '1';
+    const limited = await rateLimit(request, isInlineView ? 'asset-inline' : 'asset-download');
     if (limited) return limited;
 
     const { videoId, assetId } = await params;
@@ -71,6 +75,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!asset) return apiErrors.notFound('Asset');
     if (asset.provider === VideoAssetProvider.YOUTUBE) {
       return apiErrors.badRequest('YouTube assets cannot be downloaded');
+    }
+
+    // ?inline=1 only actually serves an inline image on R2_FILE assets. Anywhere
+    // else it falls through to a real download presign, so it must not keep the
+    // loose inline budget — otherwise appending the flag to a multi-GB cut buys
+    // 300 downloads a minute instead of 10.
+    if (isInlineView && asset.provider !== VideoAssetProvider.R2_FILE) {
+      const strictLimited = await rateLimit(request, 'asset-download');
+      if (strictLimited) return strictLimited;
     }
 
     if (asset.provider === VideoAssetProvider.R2_FILE) {

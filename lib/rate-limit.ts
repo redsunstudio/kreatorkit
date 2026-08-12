@@ -55,6 +55,13 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
   'asset-create': { windowMs: 60 * 1000, maxRequests: 20 }, // 20 per minute
   'asset-delete': { windowMs: 60 * 1000, maxRequests: 20 }, // 20 per minute
   'asset-download': { windowMs: 60 * 1000, maxRequests: 10 }, // 10 per minute
+  // Inline image views (?inline=1) are thumbnails, not downloads: one pipeline
+  // board paints one request per item, so the 10/min download budget was
+  // exhausted by the 11th card and every thumbnail after it rendered broken.
+  // Which ones survived depended on browser cache, so they appeared to flicker
+  // in and out between reloads. Cheap 302s to storage, so the ceiling is high;
+  // real file downloads keep the strict limit above.
+  'asset-inline': { windowMs: 60 * 1000, maxRequests: 300 }, // 300 per minute
   'asset-bunny-init': { windowMs: 60 * 1000, maxRequests: 10 }, // 10 per minute
   'asset-r2-init': { windowMs: 60 * 1000, maxRequests: 10 }, // 10 per minute
 
