@@ -25,6 +25,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { formatCutDateFull } from '@/lib/cut-date';
+import { CreatedByInline } from '@/components/created-by';
 import { DownloadControls } from '@/components/video-page/download-controls';
 import { VersionDeleteDialog } from '@/components/video-page/version-delete-dialog';
 import { VersionActionsDialog } from '@/components/video-page/version-actions-dialog';
@@ -157,6 +158,10 @@ export const VideoPageHeader = memo(function VideoPageHeader({
           <span className="text-sm font-medium truncate">{title}</span>
           <span className="text-xs text-muted-foreground shrink-0">•</span>
           <span className="text-xs text-muted-foreground truncate">{projectName}</span>
+          {/* The review page is often a client's only view of this product, and
+              the header is the one thing on it that never scrolls away. */}
+          <span className="text-xs text-muted-foreground shrink-0 hidden xl:inline">•</span>
+          <CreatedByInline className="hidden xl:inline-block text-xs" />
         </div>
       </div>
 
