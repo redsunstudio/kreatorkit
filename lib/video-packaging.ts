@@ -15,6 +15,36 @@
  * Pure module — no db import, so client components can share it.
  */
 
+/**
+ * The packaging track (John, 2026-08-12).
+ *
+ * Packaging is a second status on the item, shown beside the video status on the
+ * pipeline: the video status says where the CUT is, this says where the title,
+ * thumbnail and description are. Moving one never moves the other, and anyone who
+ * can move an item can move this.
+ *
+ * APPROVED is the one value with teeth. It cannot be set while a field is
+ * genuinely missing — otherwise the row would read "approved" while the push
+ * refused, and the board would be the thing that lied.
+ */
+export const PACKAGING_STATUSES = [
+  { key: 'NOT_STARTED', emoji: '📦', label: 'Not started' },
+  { key: 'IN_PROGRESS', emoji: '✍️', label: 'In progress' },
+  { key: 'READY', emoji: '👀', label: 'Ready for sign-off' },
+  { key: 'APPROVED', emoji: '✅', label: 'Approved' },
+  { key: 'CHANGES', emoji: '🔁', label: 'Changes needed' },
+] as const;
+
+export type PackagingStatusKey = (typeof PACKAGING_STATUSES)[number]['key'];
+
+export function isPackagingStatus(value: unknown): value is PackagingStatusKey {
+  return typeof value === 'string' && PACKAGING_STATUSES.some((s) => s.key === (value as string));
+}
+
+export function packagingStatusMeta(key: string) {
+  return PACKAGING_STATUSES.find((s) => s.key === key) ?? PACKAGING_STATUSES[0];
+}
+
 export interface PackagingInput {
   title: string | null;
   thumbnailUrl: string | null;
@@ -48,6 +78,60 @@ export function packagingState(video: PackagingInput): PackagingState {
   if (ready && !video.packagingConfirmedAt) missing.push('packaging sign-off');
 
   return { hasTitle, hasThumbnail, hasDescription, ready, confirmed, missing };
+}
+
+/**
+ * What a packaging-status write turns into. APPROVED stamps the confirmation
+ * (that stamp is what the publish gate reads, so it must stay in step with the
+ * status); every other value clears it. Returns the refusal reason instead of a
+ * write when APPROVED is asked for with a field still missing.
+ */
+export type PackagingWrite =
+  | {
+      ok: true;
+      data: {
+        packagingStatus: PackagingStatusKey;
+        packagingConfirmedAt: Date | null;
+        packagingConfirmedById: string | null;
+        packagingConfirmedName: string | null;
+      };
+    }
+  | { ok: false; reason: string };
+
+export function packagingStatusWrite(
+  next: PackagingStatusKey,
+  state: PackagingState,
+  actor: { id: string | null; name: string }
+): PackagingWrite {
+  if (next === 'APPROVED') {
+    if (!state.ready) {
+      return {
+        ok: false,
+        reason: `Packaging cannot be approved yet — still missing: ${state.missing
+          .filter((m) => m !== 'packaging sign-off')
+          .join(', ')}`,
+      };
+    }
+    return {
+      ok: true,
+      data: {
+        packagingStatus: next,
+        packagingConfirmedAt: new Date(),
+        packagingConfirmedById: actor.id,
+        packagingConfirmedName: actor.name,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      packagingStatus: next,
+      packagingConfirmedAt: null,
+      packagingConfirmedById: null,
+      packagingConfirmedName: null,
+    },
+  };
 }
 
 /**
