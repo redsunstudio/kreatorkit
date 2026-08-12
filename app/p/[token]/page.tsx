@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { getPostReviewByToken, resolveReviewMedia } from '@/lib/post-review';
 import { PostReviewActions } from '@/components/post-review-actions';
 import { ThumbnailImage } from '@/components/thumbnail-image';
+import { CREATED_BY_NAME, CREATED_BY_URL } from '@/components/created-by';
 
 export const dynamic = 'force-dynamic';
 
@@ -145,7 +146,17 @@ export default async function PostReviewPage({ params }: PageProps) {
 
         <PostReviewActions token={token} initialStatus={video.status} />
 
-        <p className="text-center text-[11px] text-neutral-400 mt-6">Reviewed with KreatorKit</p>
+        <p className="text-center text-[11px] text-neutral-400 mt-6">
+          Reviewed with KreatorKit, created by{' '}
+          <a
+            href={CREATED_BY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline-offset-2 hover:underline"
+          >
+            {CREATED_BY_NAME}
+          </a>
+        </p>
       </div>
     </div>
   );

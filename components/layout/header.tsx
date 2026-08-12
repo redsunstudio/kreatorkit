@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { CreatedByInline } from '@/components/created-by';
 import { cn } from '@/lib/utils';
 
 const KeyboardShortcutsModal = dynamic(
@@ -136,10 +137,11 @@ export function Header({ user, showAppNavigation = false }: HeaderProps) {
         </Sheet>
 
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 mr-6">
+        <Link href="/" className="flex items-center gap-2 mr-3">
           <Video className="h-6 w-6 text-primary" />
           <span className="font-bold text-lg hidden sm:inline-block">KreatorKit</span>
         </Link>
+        <CreatedByInline className="hidden lg:inline-block mr-6 text-[11px]" />
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
