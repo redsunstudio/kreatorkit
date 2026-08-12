@@ -8,6 +8,7 @@ import { Video, Mail, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { CreatedBy } from '@/components/created-by';
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -46,6 +47,8 @@ function VerifyEmailContent() {
           <Video className="h-8 w-8 text-primary" />
           <span className="font-bold text-2xl">KreatorKit</span>
         </Link>
+
+        <CreatedBy className="-mt-6 mb-8" />
 
         <Card>
           <CardHeader className="text-center">

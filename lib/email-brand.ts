@@ -1,3 +1,5 @@
+import { CREATED_BY_NAME, CREATED_BY_URL } from '@/lib/created-by';
+
 export const EMAIL_COLORS = {
   bg: '#171717',
   card: '#252525',
@@ -85,15 +87,11 @@ export function brandedEmailTemplate(
           ${body}
         </td></tr>
 
-        ${
-          footerText || (footerLinkText && footerLinkUrl)
-            ? `
         <tr><td style="padding:20px 0 0;text-align:center;">
           ${footerText ? `<p style="margin:0 0 6px;font-size:11px;color:${EMAIL_COLORS.textDim};">${footerText}</p>` : ''}
           ${footerLinkText && footerLinkUrl ? `<a href="${escapeAttr(footerLinkUrl)}" style="font-size:11px;color:${EMAIL_COLORS.accent};text-decoration:underline;">${escapeHtml(footerLinkText)}</a>` : ''}
-        </td></tr>`
-            : ''
-        }
+          <p style="margin:10px 0 0;font-size:11px;color:${EMAIL_COLORS.textDim};">KreatorKit, created by <a href="${CREATED_BY_URL}" style="color:${EMAIL_COLORS.textDim};text-decoration:underline;">${CREATED_BY_NAME}</a></p>
+        </td></tr>
       </table>
     </td></tr>
   </table>

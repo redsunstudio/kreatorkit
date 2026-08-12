@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { seoConfig } from '@/lib/seo';
+import { CREATED_BY_NAME, CREATED_BY_URL } from '@/lib/created-by';
 import './globals.css';
 
 const inter = Inter({
@@ -28,8 +29,8 @@ export const metadata: Metadata = {
   description: seoConfig.description,
   applicationName: seoConfig.name,
   keywords: [...seoConfig.keywords],
-  authors: [{ name: seoConfig.name, url: seoConfig.url }],
-  creator: seoConfig.name,
+  authors: [{ name: CREATED_BY_NAME, url: CREATED_BY_URL }],
+  creator: CREATED_BY_NAME,
   publisher: seoConfig.name,
   category: 'technology',
   referrer: 'no-referrer',
