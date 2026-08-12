@@ -3,6 +3,7 @@ import { Video } from 'lucide-react';
 import { getValidInvitationByToken } from '@/lib/invitations';
 import { db } from '@/lib/db';
 import { LoginForm, LoginFormSkeleton } from './login-form';
+import { CreatedBy } from '@/components/created-by';
 import { Suspense } from 'react';
 
 interface LoginPageProps {
@@ -40,6 +41,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <span className="font-bold text-2xl">KreatorKit</span>
         </Link>
 
+        <CreatedBy className="-mt-6 mb-8" />
         <Suspense fallback={<LoginFormSkeleton />}>
           <LoginForm
             googleEnabled={googleEnabled}

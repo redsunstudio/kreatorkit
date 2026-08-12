@@ -9,7 +9,7 @@ import {
   markerDTO,
   validateMarkerInput,
 } from '@/lib/review-markers';
-import { isVersionMarkerFull, listMarkers } from '@/lib/review-markers-db';
+import { countMarkers, listMarkers } from '@/lib/review-markers-db';
 
 interface RouteParams {
   params: Promise<{ videoId: string }>;
@@ -55,9 +55,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// POST /api/agent/videos/[videoId]/markers  { timestamp, label, versionId? }
+// POST /api/agent/videos/[videoId]/markers
+//   single: { timestamp, label, versionId?, createdByName? }
+//   batch:  { markers: [{ timestamp, label }, …], versionId?, createdByName? }
 // The rail the editing skills use to signpost "client should eyeball this" moments
 // while they cut, so the markers are already there when the review link goes out.
+// A pass over a cut produces a whole list at once, so the batch form exists to keep
+// that one call instead of one round trip per timecode.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     if (!isAgentRequest(request)) return apiErrors.unauthorized();
@@ -75,19 +79,42 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return apiErrors.badRequest('This item has no cut yet — upload one before adding markers');
     }
 
-    const parsed = validateMarkerInput(input.timestamp, input.label);
-    if (!parsed.ok) {
-      if (parsed.reason === 'timestamp') {
-        return apiErrors.badRequest('timestamp must be seconds or a clock string like 1:23');
+    const isBatch = Array.isArray(input.markers);
+    const rawMarkers = isBatch ? (input.markers as unknown[]) : [input];
+    if (rawMarkers.length === 0) return apiErrors.badRequest('markers is empty');
+
+    const parsedMarkers: { timestamp: number; label: string }[] = [];
+    for (const [index, raw] of rawMarkers.entries()) {
+      if (!raw || typeof raw !== 'object') {
+        return apiErrors.badRequest(`markers[${index}] must be an object`);
       }
-      if (parsed.reason === 'label_length') {
-        return apiErrors.badRequest(`label must be ${MARKER_LABEL_MAX} characters or fewer`);
+      const entry = raw as Record<string, unknown>;
+      const parsed = validateMarkerInput(entry.timestamp, entry.label);
+      if (!parsed.ok) {
+        const where = isBatch ? `markers[${index}]: ` : '';
+        if (parsed.reason === 'timestamp') {
+          return apiErrors.badRequest(
+            `${where}timestamp must be seconds or a clock string like 1:23`
+          );
+        }
+        if (parsed.reason === 'label_length') {
+          return apiErrors.badRequest(
+            `${where}label must be ${MARKER_LABEL_MAX} characters or fewer`
+          );
+        }
+        return apiErrors.badRequest(`${where}label is required`);
       }
-      return apiErrors.badRequest('label is required');
+      parsedMarkers.push({ timestamp: parsed.timestamp, label: parsed.label });
     }
 
-    if (await isVersionMarkerFull(versionId)) {
-      return apiErrors.badRequest(`A cut can carry at most ${MARKERS_PER_VERSION_MAX} markers`);
+    // Checked against the whole batch, not one at a time, so a big list either
+    // lands complete or is refused with the room that is actually left.
+    const existing = await countMarkers(versionId);
+    if (existing + parsedMarkers.length > MARKERS_PER_VERSION_MAX) {
+      const room = Math.max(0, MARKERS_PER_VERSION_MAX - existing);
+      return apiErrors.badRequest(
+        `A cut can carry at most ${MARKERS_PER_VERSION_MAX} markers — room for ${room} more, got ${parsedMarkers.length}`
+      );
     }
 
     const createdByName =
@@ -95,13 +122,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ? input.createdByName.trim().slice(0, 80)
         : 'Agent';
 
-    const created = await db.videoMarker.create({
-      data: {
+    const created = await db.videoMarker.createManyAndReturn({
+      data: parsedMarkers.map((m) => ({
         versionId,
-        timestamp: parsed.timestamp,
-        label: parsed.label,
+        timestamp: m.timestamp,
+        label: m.label,
         createdByName,
-      },
+      })),
       select: {
         id: true,
         timestamp: true,
@@ -111,7 +138,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    const response = successResponse({ versionId, marker: markerDTO(created) }, 201);
+    const markers = created.map(markerDTO).sort((a, b) => a.timestamp - b.timestamp);
+    const response = successResponse(
+      isBatch ? { versionId, markers, created: markers.length } : { versionId, marker: markers[0] },
+      201
+    );
     return withCacheControl(response, 'private, no-store');
   } catch (error) {
     logError('Agent marker create failed:', error);

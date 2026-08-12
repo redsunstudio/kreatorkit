@@ -17,7 +17,10 @@ export async function listMarkers(versionId: string): Promise<ReviewMarkerDTO[]>
   return rows.map(markerDTO);
 }
 
+export async function countMarkers(versionId: string): Promise<number> {
+  return db.videoMarker.count({ where: { versionId } });
+}
+
 export async function isVersionMarkerFull(versionId: string): Promise<boolean> {
-  const count = await db.videoMarker.count({ where: { versionId } });
-  return count >= MARKERS_PER_VERSION_MAX;
+  return (await countMarkers(versionId)) >= MARKERS_PER_VERSION_MAX;
 }

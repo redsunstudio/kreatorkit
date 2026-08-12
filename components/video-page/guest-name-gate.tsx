@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CreatedBy } from '@/components/created-by';
 
 interface GuestNameGateProps {
   guestName: string;
@@ -25,6 +26,7 @@ export const GuestNameGate = memo(function GuestNameGate({
             <User className="h-6 w-6 text-primary" />
           </div>
           <h1 className="text-xl font-semibold mb-1">Welcome to KreatorKit</h1>
+          <CreatedBy className="mb-2" />
           <p className="text-sm text-muted-foreground">
             Enter your name to view and comment on this video
           </p>
