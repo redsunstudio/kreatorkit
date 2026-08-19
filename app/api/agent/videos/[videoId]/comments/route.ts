@@ -57,6 +57,16 @@ function shapeComment(c: {
     hasFile: !!c.fileUrl,
     fileName: c.fileName,
     hasAnnotation: !!c.annotationData,
+    // What the agent can actually go and FETCH for this comment, by kind. The
+    // booleans above say a thing exists; this says which ones the attachment
+    // route will serve, so an automated pass can pull a client's screenshot or
+    // drawing without a browser login instead of guessing from a flag.
+    attachments: [
+      c.imageUrl ? 'image' : null,
+      c.voiceUrl ? 'voice' : null,
+      c.fileUrl ? 'file' : null,
+      c.annotationData ? 'annotation' : null,
+    ].filter((k): k is string => k !== null),
     authorName: c.author?.name ?? c.guestName ?? 'Guest',
     isTeam: !!c.author, // registered users are team; guests came via a share link
     tag: c.tag,
@@ -176,7 +186,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : '#F16333';
 
     if (!content) return apiErrors.badRequest('content is required');
-    if (!Number.isFinite(timestamp) || timestamp < 0) {
+    // A REPLY inherits its parent's timestamp and version (resolved below): the thread
+    // is already pinned to a moment, and asking an automated reply to restate it is how
+    // you end up with a reply that renders at the wrong point on the timeline.
+    if (!parentId && (!Number.isFinite(timestamp) || timestamp < 0)) {
       return apiErrors.badRequest('timestamp (seconds, >= 0) is required');
     }
     if (timestampEnd !== null && !(timestampEnd > timestamp)) {
@@ -195,26 +208,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
     if (!video) return apiErrors.notFound('Video');
 
-    const version = wantVersionId
-      ? video.versions.find((v) => v.id === wantVersionId)
-      : (video.versions.find((v) => v.isActive) ?? video.versions[0]);
+    // A reply takes its version from the PARENT, not from the active cut. Feedback is
+    // usually answered after the fix has already shipped as a new version, so pinning
+    // the reply to the active cut would strand it on a version the client never asked
+    // the question on -- and the thread would render split across two cuts.
+    let parent: { id: string; versionId: string; timestamp: number } | null = null;
+    if (parentId) {
+      parent = await db.comment.findUnique({
+        where: { id: parentId },
+        select: { id: true, versionId: true, timestamp: true },
+      });
+      if (!parent) return apiErrors.notFound('Parent comment');
+      if (wantVersionId && wantVersionId !== parent.versionId) {
+        return apiErrors.badRequest('versionId does not match the parent comment');
+      }
+    }
+
+    const version = parent
+      ? video.versions.find((v) => v.id === parent.versionId)
+      : wantVersionId
+        ? video.versions.find((v) => v.id === wantVersionId)
+        : (video.versions.find((v) => v.isActive) ?? video.versions[0]);
     if (!version) {
       return apiErrors.badRequest(
-        wantVersionId ? 'versionId not found on this video' : 'video has no cut to comment on'
+        parent
+          ? 'parentId belongs to a different video'
+          : wantVersionId
+            ? 'versionId not found on this video'
+            : 'video has no cut to comment on'
       );
     }
 
-    // A reply must hang off a comment on the SAME version, or the thread would render
-    // split across two cuts.
-    if (parentId) {
-      const parent = await db.comment.findUnique({
-        where: { id: parentId },
-        select: { id: true, versionId: true },
-      });
-      if (!parent || parent.versionId !== version.id) {
-        return apiErrors.badRequest('parentId must be a comment on the same version');
-      }
-    }
+    const effectiveTimestamp = parent && !Number.isFinite(timestamp) ? parent.timestamp : timestamp;
 
     // Tags are per PROJECT, so resolve against the project this video belongs to.
     let tagId: string | null = null;
@@ -242,7 +267,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const comment = await db.comment.create({
       data: {
         content,
-        timestamp,
+        timestamp: effectiveTimestamp,
         timestampEnd,
         parentId,
         guestName: authorName,
@@ -260,5 +285,47 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     logError('agent comment create failed:', error);
     return apiErrors.internalError('Failed to create comment');
+  }
+}
+
+// PATCH /api/agent/videos/[videoId]/comments — close (or reopen) a review thread.
+//
+// Replying to feedback and CLOSING it are two different acts, and only one of them was
+// possible from the rail: a thread the agent had already actioned stayed open forever,
+// so the open count stopped meaning "still outstanding" and the client's board filled
+// with feedback that had in fact been dealt with two versions ago.
+//
+// Only `isResolved` moves. Content, tag and annotation stay the author's -- an agent
+// that could edit a client's own words could quietly rewrite the record of what they
+// asked for.
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  try {
+    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    const { videoId } = await params;
+    const body = await request.json().catch(() => null);
+
+    const commentId = typeof body?.commentId === 'string' ? body.commentId : '';
+    const isResolved = typeof body?.isResolved === 'boolean' ? body.isResolved : null;
+    if (!commentId) return apiErrors.badRequest('commentId is required');
+    if (isResolved === null) return apiErrors.badRequest('isResolved (boolean) is required');
+
+    // Scoped to the videoId in the path: an agent key holding one item's id must not be
+    // able to reach a comment on somebody else's item by guessing a comment id.
+    const comment = await db.comment.findFirst({
+      where: { id: commentId, version: { videoId } },
+      select: { id: true },
+    });
+    if (!comment) return apiErrors.notFound('Comment');
+
+    const updated = await db.comment.update({
+      where: { id: commentId },
+      data: { isResolved, resolvedAt: isResolved ? new Date() : null },
+      select: commentSelect,
+    });
+
+    return withCacheControl(successResponse(shapeComment(updated)), 'private, no-store');
+  } catch (error) {
+    logError('agent comment resolve failed:', error);
+    return apiErrors.internalError('Failed to update comment');
   }
 }
