@@ -311,8 +311,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Scoped to the videoId in the path: an agent key holding one item's id must not be
     // able to reach a comment on somebody else's item by guessing a comment id.
+    //
+    // videoParentId, NOT videoId: VideoVersion.videoId is the PROVIDER's id for the file
+    // (youtube/direct), and the item this cut belongs to is videoParentId. Filtering on
+    // the wrong one compiles cleanly -- both are Strings -- and silently matches nothing.
     const comment = await db.comment.findFirst({
-      where: { id: commentId, version: { videoId } },
+      where: { id: commentId, version: { videoParentId: videoId } },
       select: { id: true },
     });
     if (!comment) return apiErrors.notFound('Comment');
