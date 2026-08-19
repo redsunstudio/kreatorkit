@@ -42,9 +42,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Scoped to the videoId in the path so a comment id alone cannot reach another
-    // client's item.
+    // client's item. videoParentId, NOT videoId: VideoVersion.videoId is the PROVIDER's
+    // id for the file, and the item the cut hangs off is videoParentId. Both are Strings,
+    // so the wrong one typechecks and quietly matches nothing.
     const comment = await db.comment.findFirst({
-      where: { id: commentId, version: { videoId } },
+      where: { id: commentId, version: { videoParentId: videoId } },
       select: {
         id: true,
         imageUrl: true,
