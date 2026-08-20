@@ -565,6 +565,10 @@ export function useCommentActions({
       setRecordingTime(0);
     } catch (err) {
       console.error('Failed to submit voice comment:', err);
+      toast.error('Voice comment failed to send', {
+        description: 'Your recording is still staged - press Send again.',
+        duration: 10000,
+      });
     } finally {
       setIsUploadingAudio(false);
     }
@@ -1100,9 +1104,19 @@ export function useCommentActions({
           } else if (finalAnnotationData === null) {
             setViewingAnnotation(null);
           }
+        } else {
+          const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+          toast.error(payload?.error || 'Edit failed to save', {
+            description: 'Your changes were NOT saved. Press Save again to retry.',
+            duration: 10000,
+          });
         }
       } catch (err) {
         console.error('Failed to edit comment:', err);
+        toast.error('Edit failed to save', {
+          description: 'Your changes were NOT saved. Press Save again to retry.',
+          duration: 10000,
+        });
       } finally {
         setIsSubmittingEdit(false);
         isMutatingRef.current = false;
