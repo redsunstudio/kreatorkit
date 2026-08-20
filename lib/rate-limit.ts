@@ -237,7 +237,11 @@ export function getClientIp(request: Request): string {
     }
   }
 
-  if (mode === 'railway') {
+  // On Railway the edge always appends the client IP as the last
+  // x-forwarded-for entry, so even a misconfigured TRUSTED_PROXY_MODE (e.g.
+  // "cloudflare" with no Cloudflare actually in front) falls back to it here
+  // instead of collapsing every visitor into the shared-bucket constant.
+  if (mode === 'railway' || process.env.RAILWAY_ENVIRONMENT) {
     // Only the LAST x-forwarded-for entry is trustworthy: Railway's edge
     // appends the address it saw on the wire, while any earlier entries (and
     // x-real-ip) pass through from the client untouched and are spoofable.
