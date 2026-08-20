@@ -191,6 +191,8 @@ function isPlausibleIp(value: string): boolean {
  *
  *   TRUSTED_PROXY_MODE=cloudflare  — trust cf-connecting-ip (Cloudflare edge)
  *   TRUSTED_PROXY_MODE=nginx       — trust x-real-ip / x-forwarded-for (Nginx real_ip_header)
+ *   TRUSTED_PROXY_MODE=railway     — trust the last x-forwarded-for entry (Railway edge).
+ *                                    Auto-selected when RAILWAY_ENVIRONMENT is present.
  *
  * Without TRUSTED_PROXY_MODE set, no proxy headers are trusted: all requests appear
  * as 127.0.0.1, which means rate limits apply per-process rather than per-client IP.
@@ -201,7 +203,15 @@ function isPlausibleIp(value: string): boolean {
  * do so allows clients to spoof their IP and bypass rate limits.
  */
 export function getClientIp(request: Request): string {
-  const mode = process.env.TRUSTED_PROXY_MODE?.trim().toLowerCase();
+  // Railway injects RAILWAY_ENVIRONMENT into every deploy, and its edge proxy
+  // appends the real client IP as the LAST x-forwarded-for entry. Defaulting to
+  // railway mode there matters: without it production fell back to the
+  // 127.0.0.1 constant below, so the whole site shared ONE rate-limit bucket -
+  // one guest's browsing burned the share-unlock budget (20/15min) for every
+  // other guest, which is exactly the intermittent "link won't open" report.
+  const mode =
+    process.env.TRUSTED_PROXY_MODE?.trim().toLowerCase() ||
+    (process.env.RAILWAY_ENVIRONMENT ? 'railway' : undefined);
 
   if (mode === 'cloudflare') {
     // cf-connecting-ip is injected by Cloudflare and cannot be set by clients
@@ -219,6 +229,18 @@ export function getClientIp(request: Request): string {
     if (realIp && isPlausibleIp(realIp)) return realIp;
 
     // x-forwarded-for last entry added by Nginx when proxy_add_x_forwarded_for is used.
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    if (forwardedFor) {
+      const entries = forwardedFor.split(',');
+      const last = entries[entries.length - 1].trim();
+      if (isPlausibleIp(last)) return last;
+    }
+  }
+
+  if (mode === 'railway') {
+    // Only the LAST x-forwarded-for entry is trustworthy: Railway's edge
+    // appends the address it saw on the wire, while any earlier entries (and
+    // x-real-ip) pass through from the client untouched and are spoofable.
     const forwardedFor = request.headers.get('x-forwarded-for');
     if (forwardedFor) {
       const entries = forwardedFor.split(',');
