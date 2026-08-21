@@ -68,7 +68,9 @@ export function ReviewMarkersStrip({
   return (
     <>
       {!hideList && markers.length > 0 && (
-        <div className="px-3 py-2 border-t bg-background/60">
+        // shrink-0: the rail is a sibling of the flex-1 video viewport, so
+        // without this it wins the fight for space and squeezes the player.
+        <div className="shrink-0 px-3 py-2 border-t bg-background/60">
           <div className="flex items-center gap-2 mb-1.5">
             <Flag className="h-3.5 w-3.5 text-orange-500" />
             <span className="text-xs font-semibold">Review points</span>
@@ -76,10 +78,17 @@ export function ReviewMarkersStrip({
             <span className="hidden sm:inline text-xs text-muted-foreground">
               — flagged for you to check
             </span>
+            <span className="sm:hidden text-xs text-muted-foreground">— swipe</span>
           </div>
-          <ul className="flex flex-wrap gap-1.5">
+          {/*
+            On a phone every chip claimed its own row, so a cut with a dozen
+            review points grew a rail taller than the screen and collapsed the
+            video to nothing. Mobile gets ONE row that scrolls sideways;
+            wrapping returns at sm: where there is width for it.
+          */}
+          <ul className="flex flex-nowrap overflow-x-auto snap-x snap-mandatory gap-1.5 -mx-3 px-3 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-x-visible sm:mx-0 sm:px-0 sm:pb-0 sm:snap-none">
             {markers.map((marker) => (
-              <li key={marker.id} className="flex items-center">
+              <li key={marker.id} className="flex items-center shrink-0 snap-start sm:shrink">
                 <button
                   onClick={() => onSeek(marker.timestamp)}
                   className="inline-flex items-center gap-1.5 h-7 rounded-md border border-orange-500/30 bg-orange-500/10 pl-2 pr-2 text-xs text-orange-200 hover:bg-orange-500/20 transition-colors max-w-[280px]"

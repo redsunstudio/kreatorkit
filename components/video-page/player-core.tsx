@@ -189,8 +189,14 @@ export const PlayerCore = memo(function PlayerCore({
       <div
         ref={videoContainerRef}
         className={cn(
-          'flex-1 bg-black flex items-center justify-center relative cursor-pointer group min-h-0',
-          isFullscreenMode && 'absolute inset-0',
+          // min-h-0 is not a floor, it is permission to shrink to nothing: as
+          // a flex-1 child, a sibling that grows (the review-points rail with
+          // a dozen markers on it) shrinks this until the video is a sliver.
+          // The phone gets a real floor; sm: keeps the old free-shrink
+          // behaviour, which has never been the problem on wider screens.
+          'flex-1 bg-black flex items-center justify-center relative cursor-pointer group',
+          'min-h-[40vh] shrink-0 sm:min-h-0 sm:shrink',
+          isFullscreenMode && 'absolute inset-0 min-h-0 shrink-0',
           cursorIdle && isPlaying && 'cursor-none'
         )}
         onClick={handlePlayPause}
