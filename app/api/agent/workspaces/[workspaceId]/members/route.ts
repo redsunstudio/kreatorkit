@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { InvitationRole, InvitationScope, WorkspaceMemberRole } from '@prisma/client';
+import {
+  InvitationRole,
+  InvitationScope,
+  InvitationStatus,
+  WorkspaceMemberRole,
+} from '@prisma/client';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { agentAuth } from '@/lib/agent-auth';
 import {
@@ -8,6 +13,7 @@ import {
   createOrRefreshInvitation,
   sendInvitationEmail,
 } from '@/lib/invitations';
+import { removeWorkspaceMember } from '@/lib/workspace-members';
 import { isValidEmailAddress, normalizeEmail } from '@/lib/email-validation';
 import { logError } from '@/lib/logger';
 
@@ -205,5 +211,74 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     logError('agent workspace member grant failed:', error);
     return apiErrors.internalError('Failed to grant access');
+  }
+}
+
+// DELETE /api/agent/workspaces/[workspaceId]/members { email } — revoke access
+// Master key only. Removes the membership through the shared transaction (any
+// projects they owned reassign to the workspace owner — never copy that logic)
+// and cancels pending invitations for the same email, so "remove this person"
+// works whether or not they ever accepted. Idempotent: an email with no access
+// reports not-a-member rather than erroring.
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
+    const { workspaceId } = await params;
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body.email !== 'string') {
+      return apiErrors.badRequest('email is required');
+    }
+    const email = normalizeEmail(body.email);
+    if (!isValidEmailAddress(email)) {
+      return apiErrors.badRequest('Invalid email address');
+    }
+
+    const workspace = await resolveWorkspace(workspaceId);
+    if (!workspace) return apiErrors.notFound('Workspace');
+
+    const user = await db.user.findUnique({
+      where: { email },
+      select: { id: true, name: true },
+    });
+    if (user && user.id === workspace.ownerId) {
+      return apiErrors.badRequest(
+        'That email is the workspace owner — ownership cannot be removed here'
+      );
+    }
+
+    let removedMembership = false;
+    if (user) {
+      const existing = await db.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: workspace.id, userId: user.id } },
+        select: { id: true },
+      });
+      if (existing) {
+        await removeWorkspaceMember(workspace.id, user.id);
+        removedMembership = true;
+      }
+    }
+
+    const cancelled = await db.invitation.updateMany({
+      where: { workspaceId: workspace.id, email, status: InvitationStatus.PENDING },
+      data: { status: InvitationStatus.CANCELED },
+    });
+
+    return successResponse({
+      status: removedMembership
+        ? 'removed'
+        : cancelled.count > 0
+          ? 'invitation-cancelled'
+          : 'not-a-member',
+      email,
+      workspace: workspace.slug,
+      removedMembership,
+      cancelledInvitations: cancelled.count,
+    });
+  } catch (error) {
+    logError('agent workspace member removal failed:', error);
+    return apiErrors.internalError('Failed to remove access');
   }
 }
