@@ -2,7 +2,9 @@ import { NextRequest } from 'next/server';
 import { VideoStatus, VideoType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
-import { isAgentRequest } from '@/lib/agent-auth';
+import { Prisma } from '@prisma/client';
+import { agentAuth, isAgentRequest } from '@/lib/agent-auth';
+import { ASSET_DOWNLOAD_PATH_RE, sanitizePackagingOptions } from '@/lib/video-packaging';
 import { createPresignedFileGetUrl, createPresignedVideoGetUrl } from '@/lib/r2';
 import { collectVideoMediaUrls, deleteMediaFilesBestEffort } from '@/lib/r2-cleanup';
 import { logError } from '@/lib/logger';
@@ -81,6 +83,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         // refused without guessing from the error string.
         packagingConfirmedAt: video.packagingConfirmedAt?.toISOString() ?? null,
         packagingConfirmedName: video.packagingConfirmedName,
+        // ABC test slots — [{ title?, thumbnailUrl? }] max 3, positional (A/B/C).
+        packagingOptions: video.packagingOptions ?? null,
         membersOnly: video.membersOnly,
         projectId: video.project.id,
         workspaceId: video.project.workspaceId,
@@ -144,15 +148,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateData.title = String(body.title).trim().slice(0, 200);
     }
     if (body?.thumbnailUrl !== undefined) {
-      if (
-        body.thumbnailUrl !== null &&
-        !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/.test(
-          String(body.thumbnailUrl)
-        )
-      ) {
+      if (body.thumbnailUrl !== null && !ASSET_DOWNLOAD_PATH_RE.test(String(body.thumbnailUrl))) {
         return apiErrors.badRequest('thumbnailUrl must be an asset download path');
       }
       updateData.thumbnailUrl = body.thumbnailUrl;
+    }
+    // ABC test slots — same shape rules as the item page (lib/video-packaging):
+    // max 3, positional, empty slots kept, titles ≤200, thumbs = asset paths.
+    if (body?.packagingOptions !== undefined) {
+      const sanitized = sanitizePackagingOptions(body.packagingOptions);
+      if (!sanitized.ok) return apiErrors.badRequest(sanitized.reason);
+      updateData.packagingOptions = sanitized.value ?? Prisma.DbNull;
     }
     if (body?.zernioPostId !== undefined) {
       if (body.zernioPostId !== null && !/^[a-f0-9]{24}$/.test(String(body.zernioPostId))) {
@@ -191,9 +197,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/agent/videos/[videoId] — permanent removal (item + files).
+// Master key only: a scoped automation key must never be able to destroy
+// client work.
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
     const { videoId } = await params;
     const video = await db.video.findUnique({ where: { id: videoId }, select: { id: true } });
     if (!video) return apiErrors.notFound('Video');

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
-import { isAgentRequest } from '@/lib/agent-auth';
+import { agentAuth } from '@/lib/agent-auth';
 import { publishVideoToYouTube, PublishError, type PublishMode } from '@/lib/publish-video';
 import { publishPostToLinkedIn } from '@/lib/publish-post';
 import { db } from '@/lib/db';
@@ -15,7 +15,10 @@ interface RouteParams {
 // client's YouTube Studio; live = straight out + auto-PUBLISHED.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    // Master key only — this reaches the client's channel.
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
     const { videoId } = await params;
     const body = await request.json().catch(() => null);
 

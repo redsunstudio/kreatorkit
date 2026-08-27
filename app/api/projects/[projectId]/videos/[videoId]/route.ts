@@ -11,7 +11,11 @@ import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response
 import { logError } from '@/lib/logger';
 import { canDownloadProjectMedia } from '@/lib/project-download';
 import { notifyReviewReady } from '@/lib/review-notify';
-import { packagingState } from '@/lib/video-packaging';
+import {
+  ASSET_DOWNLOAD_PATH_RE,
+  packagingState,
+  sanitizePackagingOptions,
+} from '@/lib/video-packaging';
 
 function bigintSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
@@ -232,10 +236,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (brief !== undefined && brief !== null && typeof brief !== 'string') {
       return apiErrors.badRequest('brief must be a string');
     }
-    const ASSET_DOWNLOAD_RE =
-      /^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/;
     if (thumbnailUrl !== undefined && thumbnailUrl !== null) {
-      if (typeof thumbnailUrl !== 'string' || !ASSET_DOWNLOAD_RE.test(thumbnailUrl)) {
+      if (typeof thumbnailUrl !== 'string' || !ASSET_DOWNLOAD_PATH_RE.test(thumbnailUrl)) {
         return apiErrors.badRequest('thumbnailUrl must be an asset download path');
       }
     }
@@ -267,43 +269,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // ABC packaging test: up to three candidate title+thumbnail pairs. Slots are
-    // positional (A/B/C), so empty slots are KEPT as empty objects — dropping
-    // them would shift a filled C into B on the next read.
+    // ABC packaging test — shared shape rules live in lib/video-packaging.
     if (packagingOptions !== undefined) {
-      if (packagingOptions === null) {
-        updateData.packagingOptions = Prisma.DbNull;
-      } else {
-        if (!Array.isArray(packagingOptions) || packagingOptions.length > 3) {
-          return apiErrors.badRequest('packagingOptions must be an array of up to 3 options');
-        }
-        const cleanOptions: { title?: string; thumbnailUrl?: string }[] = [];
-        for (const raw of packagingOptions) {
-          if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-            return apiErrors.badRequest('each packaging option must be an object');
-          }
-          const option: { title?: string; thumbnailUrl?: string } = {};
-          if (raw.title !== undefined && raw.title !== null) {
-            if (typeof raw.title !== 'string') {
-              return apiErrors.badRequest('a packaging option title must be a string');
-            }
-            const trimmed = raw.title.trim().slice(0, 200);
-            if (trimmed) option.title = trimmed;
-          }
-          if (raw.thumbnailUrl !== undefined && raw.thumbnailUrl !== null) {
-            if (typeof raw.thumbnailUrl !== 'string' || !ASSET_DOWNLOAD_RE.test(raw.thumbnailUrl)) {
-              return apiErrors.badRequest(
-                'a packaging option thumbnailUrl must be an asset download path'
-              );
-            }
-            option.thumbnailUrl = raw.thumbnailUrl;
-          }
-          cleanOptions.push(option);
-        }
-        updateData.packagingOptions = cleanOptions.some((o) => o.title || o.thumbnailUrl)
-          ? cleanOptions
-          : Prisma.DbNull;
-      }
+      const sanitized = sanitizePackagingOptions(packagingOptions);
+      if (!sanitized.ok) return apiErrors.badRequest(sanitized.reason);
+      updateData.packagingOptions = sanitized.value ?? Prisma.DbNull;
     }
 
     // No packaging gate on status. Where an item sits on the board is a fact

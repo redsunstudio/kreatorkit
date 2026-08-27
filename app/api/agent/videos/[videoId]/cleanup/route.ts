@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
-import { isAgentRequest } from '@/lib/agent-auth';
+import { agentAuth } from '@/lib/agent-auth';
 import { cleanupVideoStorage } from '@/lib/video-cleanup';
 import { logError } from '@/lib/logger';
 
@@ -14,7 +14,10 @@ interface RouteParams {
 // comments, the brief and the thumbnail stay, the status is untouched.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    // Master key only — this deletes stored files.
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
     const { videoId } = await params;
 
     const result = await cleanupVideoStorage(videoId);

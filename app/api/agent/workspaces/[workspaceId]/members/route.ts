@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { InvitationRole, InvitationScope, WorkspaceMemberRole } from '@prisma/client';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
-import { isAgentRequest } from '@/lib/agent-auth';
+import { agentAuth } from '@/lib/agent-auth';
 import {
   buildInvitationUrl,
   createOrRefreshInvitation,
@@ -40,9 +40,12 @@ async function resolveWorkspace(idOrSlug: string) {
 }
 
 // GET /api/agent/workspaces/[workspaceId]/members — who can see this client
+// Master key only: member emails are PII a scoped automation has no need for.
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
     const { workspaceId } = await params;
 
     const workspace = await resolveWorkspace(workspaceId);
@@ -95,9 +98,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // POST /api/agent/workspaces/[workspaceId]/members — grant access by email
+// Master key only: granting workspace access is an admin act.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
     const { workspaceId } = await params;
 
     const body = await request.json().catch(() => null);

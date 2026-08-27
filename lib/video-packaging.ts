@@ -157,6 +157,56 @@ export function packagingErrorMessage(state: PackagingState): string {
   );
 }
 
+/**
+ * ABC packaging test (John, 2026-08-27): up to three candidate title+thumbnail
+ * pairs for YouTube's Test & Compare, stored on Video.packagingOptions. Slots
+ * are positional (A/B/C), so empty slots are KEPT as empty objects — dropping
+ * them would shift a filled C into B on the next read. Shared by the session
+ * and agent PATCH rails so both enforce the same shape.
+ */
+export const ASSET_DOWNLOAD_PATH_RE =
+  /^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/;
+
+export type SanitizedPackagingOptions =
+  | { ok: true; value: { title?: string; thumbnailUrl?: string }[] | null }
+  | { ok: false; reason: string };
+
+export function sanitizePackagingOptions(input: unknown): SanitizedPackagingOptions {
+  if (input === null) return { ok: true, value: null };
+  if (!Array.isArray(input) || input.length > 3) {
+    return { ok: false, reason: 'packagingOptions must be an array of up to 3 options' };
+  }
+  const clean: { title?: string; thumbnailUrl?: string }[] = [];
+  for (const raw of input) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { ok: false, reason: 'each packaging option must be an object' };
+    }
+    const record = raw as Record<string, unknown>;
+    const option: { title?: string; thumbnailUrl?: string } = {};
+    if (record.title !== undefined && record.title !== null) {
+      if (typeof record.title !== 'string') {
+        return { ok: false, reason: 'a packaging option title must be a string' };
+      }
+      const trimmed = record.title.trim().slice(0, 200);
+      if (trimmed) option.title = trimmed;
+    }
+    if (record.thumbnailUrl !== undefined && record.thumbnailUrl !== null) {
+      if (
+        typeof record.thumbnailUrl !== 'string' ||
+        !ASSET_DOWNLOAD_PATH_RE.test(record.thumbnailUrl)
+      ) {
+        return {
+          ok: false,
+          reason: 'a packaging option thumbnailUrl must be an asset download path',
+        };
+      }
+      option.thumbnailUrl = record.thumbnailUrl;
+    }
+    clean.push(option);
+  }
+  return { ok: true, value: clean.some((o) => o.title || o.thumbnailUrl) ? clean : null };
+}
+
 const URL_RE = /https?:\/\/[^\s<>"')]+/gi;
 
 /**

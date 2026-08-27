@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
-import { isAgentRequest } from '@/lib/agent-auth';
+import { agentAuth } from '@/lib/agent-auth';
 import { getR2FileObjectMetadata } from '@/lib/r2';
 import { logError } from '@/lib/logger';
 import { parseStrategy, strategyLimitError } from '@/lib/strategy';
@@ -16,7 +16,8 @@ interface RouteParams {
 // verified after every update.
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
     const { workspaceId } = await params;
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },
@@ -58,6 +59,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return withCacheControl(
       successResponse({
         ...workspace,
+        // publishing carries per-workspace Zernio API keys — master key only.
+        publishing: auth.admin ? workspace.publishing : null,
         strategy: parseStrategy(workspace.strategy),
         pillarCounts,
         audit: {
@@ -90,7 +93,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 // field set to null clears it (explicit, never accidental).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    if (!isAgentRequest(request)) return apiErrors.unauthorized();
+    // Master key only — this writes feature flags, branding and the publishing
+    // wiring (per-workspace Zernio keys).
+    const auth = agentAuth(request);
+    if (!auth.ok) return apiErrors.unauthorized();
+    if (!auth.admin) return apiErrors.forbidden('This action needs the master agent key');
     const { workspaceId } = await params;
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object') return apiErrors.badRequest('nothing to update');
