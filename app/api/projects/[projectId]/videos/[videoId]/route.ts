@@ -208,6 +208,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       videoType,
       postOptions,
       packagingConfirmed,
+      packagingOptions,
       membersOnly,
     } = body;
 
@@ -231,13 +232,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (brief !== undefined && brief !== null && typeof brief !== 'string') {
       return apiErrors.badRequest('brief must be a string');
     }
+    const ASSET_DOWNLOAD_RE =
+      /^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/;
     if (thumbnailUrl !== undefined && thumbnailUrl !== null) {
-      if (
-        typeof thumbnailUrl !== 'string' ||
-        !/^\/api\/videos\/[A-Za-z0-9]+\/assets\/[A-Za-z0-9]+\/download(\?inline=1)?$/.test(
-          thumbnailUrl
-        )
-      ) {
+      if (typeof thumbnailUrl !== 'string' || !ASSET_DOWNLOAD_RE.test(thumbnailUrl)) {
         return apiErrors.badRequest('thumbnailUrl must be an asset download path');
       }
     }
@@ -266,6 +264,45 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           clean.firstComment = String(postOptions.firstComment).trim().slice(0, 1250);
         }
         updateData.postOptions = Object.keys(clean).length > 0 ? clean : Prisma.DbNull;
+      }
+    }
+
+    // ABC packaging test: up to three candidate title+thumbnail pairs. Slots are
+    // positional (A/B/C), so empty slots are KEPT as empty objects — dropping
+    // them would shift a filled C into B on the next read.
+    if (packagingOptions !== undefined) {
+      if (packagingOptions === null) {
+        updateData.packagingOptions = Prisma.DbNull;
+      } else {
+        if (!Array.isArray(packagingOptions) || packagingOptions.length > 3) {
+          return apiErrors.badRequest('packagingOptions must be an array of up to 3 options');
+        }
+        const cleanOptions: { title?: string; thumbnailUrl?: string }[] = [];
+        for (const raw of packagingOptions) {
+          if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+            return apiErrors.badRequest('each packaging option must be an object');
+          }
+          const option: { title?: string; thumbnailUrl?: string } = {};
+          if (raw.title !== undefined && raw.title !== null) {
+            if (typeof raw.title !== 'string') {
+              return apiErrors.badRequest('a packaging option title must be a string');
+            }
+            const trimmed = raw.title.trim().slice(0, 200);
+            if (trimmed) option.title = trimmed;
+          }
+          if (raw.thumbnailUrl !== undefined && raw.thumbnailUrl !== null) {
+            if (typeof raw.thumbnailUrl !== 'string' || !ASSET_DOWNLOAD_RE.test(raw.thumbnailUrl)) {
+              return apiErrors.badRequest(
+                'a packaging option thumbnailUrl must be an asset download path'
+              );
+            }
+            option.thumbnailUrl = raw.thumbnailUrl;
+          }
+          cleanOptions.push(option);
+        }
+        updateData.packagingOptions = cleanOptions.some((o) => o.title || o.thumbnailUrl)
+          ? cleanOptions
+          : Prisma.DbNull;
       }
     }
 

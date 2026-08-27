@@ -490,6 +490,12 @@ model Video {
   // BETA post extras — { repostUrl?, disableLinkPreview?, firstComment? }
   postOptions Json?
 
+  // ABC packaging test (John, 2026-08-27): up to three candidate title+thumbnail
+  // pairs for YouTube's Test & Compare. The item's own title/thumbnail stay the
+  // working packaging; these are the test variants, kept by slot position.
+  // Shape: [{ title?: string, thumbnailUrl?: string }] (max 3).
+  packagingOptions Json?
+
   // Ordering within project
   position Int @default(0)
 

@@ -66,6 +66,11 @@ interface PostOptions {
   firstComment?: string;
 }
 
+interface PackagingOption {
+  title?: string | null;
+  thumbnailUrl?: string | null;
+}
+
 interface ItemVideo {
   id: string;
   projectId: string;
@@ -76,6 +81,7 @@ interface ItemVideo {
   description: string | null;
   thumbnailUrl: string | null;
   postOptions?: PostOptions | null;
+  packagingOptions?: PackagingOption[] | null;
   storageClearedAt?: string | null;
   packagingConfirmedAt?: string | null;
   packagingConfirmedName?: string | null;
@@ -178,6 +184,19 @@ export function VideoItemClient({
   const [noteDraft, setNoteDraft] = useState('');
   const [packagedAt, setPackagedAt] = useState<string | null>(video.packagingConfirmedAt ?? null);
   const [packagedBy, setPackagedBy] = useState<string | null>(video.packagingConfirmedName ?? null);
+  // ABC test slots are positional (A/B/C) — always render exactly three.
+  const [pkgOptions, setPkgOptions] = useState<{ title: string; thumbnailUrl: string | null }[]>(
+    [0, 1, 2].map((i) => ({
+      title: video.packagingOptions?.[i]?.title ?? '',
+      thumbnailUrl: video.packagingOptions?.[i]?.thumbnailUrl ?? null,
+    }))
+  );
+  const [pkgOptState, setPkgOptState] = useState<'idle' | 'typing' | 'saving' | 'saved' | 'error'>(
+    'idle'
+  );
+  const pkgOptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [uploadingOptThumb, setUploadingOptThumb] = useState<number | null>(null);
+  const optThumbInputs = useRef<(HTMLInputElement | null)[]>([]);
   const [membersOnly, setMembersOnly] = useState(!!video.membersOnly);
   const [confirmingPackaging, setConfirmingPackaging] = useState(false);
   const [postingNote, setPostingNote] = useState(false);
@@ -225,7 +244,10 @@ export function VideoItemClient({
   }, [loadAssets, loadNotes]);
 
   const uploadsActive =
-    uploads.some((u) => u.state === 'uploading') || uploadingCut !== null || uploadingThumb;
+    uploads.some((u) => u.state === 'uploading') ||
+    uploadingCut !== null ||
+    uploadingThumb ||
+    uploadingOptThumb !== null;
   useEffect(() => {
     if (!uploadsActive) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -263,6 +285,60 @@ export function VideoItemClient({
       toast.error('Could not update the packaging sign-off');
     } finally {
       setConfirmingPackaging(false);
+    }
+  }
+
+  async function persistPkgOptions(next: { title: string; thumbnailUrl: string | null }[]) {
+    setPkgOptState('saving');
+    try {
+      // undefined keys drop out of the JSON body — the API stores only what's set.
+      await patchItem({
+        packagingOptions: next.map((o) => ({
+          title: o.title.trim() || undefined,
+          thumbnailUrl: o.thumbnailUrl || undefined,
+        })),
+      });
+      setPkgOptState('saved');
+      setTimeout(() => setPkgOptState((st) => (st === 'saved' ? 'idle' : st)), 2000);
+    } catch {
+      setPkgOptState('error');
+      toast.error('Could not save the packaging options');
+    }
+  }
+
+  function onPkgOptionTitleChange(index: number, value: string) {
+    const next = pkgOptions.map((o, i) => (i === index ? { ...o, title: value } : o));
+    setPkgOptions(next);
+    setPkgOptState('typing');
+    if (pkgOptTimer.current) clearTimeout(pkgOptTimer.current);
+    pkgOptTimer.current = setTimeout(() => void persistPkgOptions(next), 1200);
+  }
+
+  function onPkgOptionTitleBlur() {
+    if (pkgOptTimer.current) clearTimeout(pkgOptTimer.current);
+    void persistPkgOptions(pkgOptions);
+  }
+
+  async function uploadOptionThumbnail(index: number, files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('The thumbnail needs to be an image');
+      return;
+    }
+    setUploadingOptThumb(index);
+    try {
+      const asset = await uploadAsset(file, () => {});
+      const url = `/api/videos/${video.id}/assets/${asset.id}/download?inline=1`;
+      const next = pkgOptions.map((o, i) => (i === index ? { ...o, thumbnailUrl: url } : o));
+      setPkgOptions(next);
+      await persistPkgOptions(next);
+      toast.success(`Option ${'ABC'[index]} thumbnail saved`);
+      await loadAssets();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Thumbnail upload failed');
+    } finally {
+      setUploadingOptThumb(null);
     }
   }
 
@@ -1015,6 +1091,101 @@ export function VideoItemClient({
                 {ok ? 'OK' : 'TODO'} {label}
               </span>
             ))}
+          </div>
+
+          {/* ABC test - three candidate thumbnail+title pairs for YouTube's
+              Test & Compare. The working title/thumbnail above stay in charge;
+              these are the variants the test runs against each other. */}
+          <div className="mt-3 border-t pt-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-sm font-semibold">🧪 ABC test</span>
+              <span className="text-xs text-muted-foreground">
+                Up to three thumbnail + title options — YouTube tests them against each other.
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {pkgOptState === 'saving' && 'Saving…'}
+                {pkgOptState === 'saved' && '✓ Saved'}
+                {pkgOptState === 'error' && (
+                  <button
+                    className="text-orange-300 hover:text-orange-200"
+                    onClick={() => void persistPkgOptions(pkgOptions)}
+                  >
+                    Save failed — retry
+                  </button>
+                )}
+              </span>
+            </div>
+            <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {pkgOptions.map((opt, i) => (
+                <div key={i} className="rounded-lg border bg-background/40 p-2 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Option {'ABC'[i]}</p>
+                  {canEdit && (
+                    <input
+                      ref={(el) => {
+                        optThumbInputs.current[i] = el;
+                      }}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        void uploadOptionThumbnail(i, e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                  )}
+                  <div className="relative group">
+                    <ThumbnailImage
+                      src={
+                        opt.thumbnailUrl
+                          ? opt.thumbnailUrl.includes('?')
+                            ? opt.thumbnailUrl
+                            : `${opt.thumbnailUrl}?inline=1`
+                          : null
+                      }
+                      alt={`Option ${'ABC'[i]} thumbnail`}
+                      className="rounded-md border w-full aspect-video object-cover"
+                      fallback={
+                        <button
+                          className="rounded-md border border-dashed w-full aspect-video flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:border-white/25 transition-colors"
+                          onClick={() => canEdit && optThumbInputs.current[i]?.click()}
+                          disabled={!canEdit || uploadingOptThumb !== null}
+                        >
+                          {uploadingOptThumb === i ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          {canEdit ? 'Upload thumbnail' : 'No thumbnail'}
+                        </button>
+                      }
+                    />
+                    {opt.thumbnailUrl && canEdit && (
+                      <button
+                        className="absolute bottom-1.5 right-1.5 rounded-md bg-black/70 backdrop-blur px-2 py-0.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => optThumbInputs.current[i]?.click()}
+                        disabled={uploadingOptThumb !== null}
+                      >
+                        {uploadingOptThumb === i ? 'Uploading…' : 'Replace'}
+                      </button>
+                    )}
+                  </div>
+                  {canEdit ? (
+                    <input
+                      value={opt.title}
+                      onChange={(e) => onPkgOptionTitleChange(i, e.target.value)}
+                      onBlur={onPkgOptionTitleBlur}
+                      maxLength={200}
+                      placeholder={`Title ${'ABC'[i]}`}
+                      className="w-full rounded-md border bg-transparent px-2.5 py-1.5 text-sm"
+                    />
+                  ) : (
+                    <p className="text-sm break-words min-h-[1.5rem]">
+                      {opt.title || <span className="text-muted-foreground">No title yet</span>}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
 
           {pendingNoteLinks.length > 0 && (
