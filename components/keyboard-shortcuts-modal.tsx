@@ -22,6 +22,8 @@ const shortcutGroups: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['Space', 'K'], description: 'Play / Pause' },
       { keys: ['M'], description: 'Mute / Unmute' },
+      { keys: ['F'], description: 'Fullscreen' },
+      { keys: ['C'], description: 'Comment at the playhead' },
     ],
   },
   {
@@ -31,6 +33,9 @@ const shortcutGroups: ShortcutGroup[] = [
       { keys: ['→'], description: 'Seek forward 5s' },
       { keys: ['J'], description: 'Seek back 10s' },
       { keys: ['L'], description: 'Seek forward 10s' },
+      { keys: [','], description: 'Back one frame' },
+      { keys: ['.'], description: 'Forward one frame' },
+      { keys: ['0', '9'], description: 'Jump to 0% - 90%' },
     ],
   },
   {

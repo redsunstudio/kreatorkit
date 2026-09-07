@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, type RefObject } from 'react';
+import { memo, useEffect, useRef, useState, type RefObject } from 'react';
 import Link from 'next/link';
 import {
   Image as ImageIcon,
@@ -122,6 +122,19 @@ export const CommentComposer = memo(function CommentComposer({
   pauseVideoForAnnotation,
   assets,
 }: CommentComposerProps) {
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  // The player's C shortcut asks for the composer; focusing the textarea expands it.
+  useEffect(() => {
+    const focusComposer = () => {
+      const el = composerRef.current?.querySelector('textarea');
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    };
+    window.addEventListener('kk:focus-composer', focusComposer);
+    return () => window.removeEventListener('kk:focus-composer', focusComposer);
+  }, []);
   const [isFocused, setIsFocused] = useState(false);
   const rangeButtonLabel =
     commentRangeStart === null || commentRangeEnd !== null ? 'Set In' : 'Set Out';
@@ -332,7 +345,16 @@ export const CommentComposer = memo(function CommentComposer({
               </button>
             </div>
           )}
-          <div onFocusCapture={() => setIsFocused(true)} onBlurCapture={() => setIsFocused(false)}>
+          <div
+            ref={composerRef}
+            onFocusCapture={() => {
+              setIsFocused(true);
+              // Frame.io behaviour: clicking into the box pauses the cut, so the
+              // note lands on the frame the reviewer is looking at.
+              pauseVideoForAnnotation();
+            }}
+            onBlurCapture={() => setIsFocused(false)}
+          >
             {isExpanded && (
               <div className="mb-2 flex items-center gap-2 flex-wrap">
                 <Button
@@ -370,9 +392,11 @@ export const CommentComposer = memo(function CommentComposer({
                 isExpanded ? 'min-h-[140px]' : 'min-h-0'
               }`}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  handleAddComment();
-                }
+                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                // Enter sends, Shift+Enter breaks the line (Cmd/Ctrl+Enter still sends).
+                if (e.shiftKey) return;
+                e.preventDefault();
+                handleAddComment();
               }}
               onPaste={(e) => handlePaste(e, false)}
             />

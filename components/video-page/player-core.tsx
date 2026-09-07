@@ -102,6 +102,9 @@ interface PlayerCoreProps {
   setIsMobileCommentsOpen: (value: boolean) => void;
   handleTimelineMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   handleTimelineMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
+  handleTimelineTouchStart?: (e: React.TouchEvent<HTMLDivElement>) => void;
+  handleTimelineTouchMove?: (e: React.TouchEvent<HTMLDivElement>) => void;
+  handleTimelineTouchEnd?: (e: React.TouchEvent<HTMLDivElement>) => void;
   handleSeekToTimestamp: (
     timestamp: number,
     annotation?: string | null,
@@ -175,6 +178,9 @@ export const PlayerCore = memo(function PlayerCore({
   setIsMobileCommentsOpen,
   handleTimelineMouseDown,
   handleTimelineMouseMove,
+  handleTimelineTouchStart,
+  handleTimelineTouchMove,
+  handleTimelineTouchEnd,
   handleSeekToTimestamp,
   commentMarkers,
   reviewMarkers,
@@ -692,9 +698,13 @@ export const PlayerCore = memo(function PlayerCore({
 
         <div
           ref={timelineRef}
-          className="relative h-8 bg-muted rounded cursor-pointer select-none"
+          className="relative h-8 bg-muted rounded cursor-pointer select-none touch-none"
           onMouseDown={handleTimelineMouseDown}
           onMouseMove={handleTimelineMouseMove}
+          onTouchStart={handleTimelineTouchStart}
+          onTouchMove={handleTimelineTouchMove}
+          onTouchEnd={handleTimelineTouchEnd}
+          onTouchCancel={handleTimelineTouchEnd}
         >
           <div
             className="absolute left-0 top-0 h-full bg-primary/30 rounded pointer-events-none"
@@ -740,6 +750,13 @@ export const PlayerCore = memo(function PlayerCore({
               hasRange && comment.timestampEnd !== null
                 ? (comment.timestampEnd / duration) * 100
                 : 0;
+            // The marker under the playhead lights up so the reviewer can see
+            // which note they are listening to without scanning the list.
+            const activeUntil =
+              hasRange && comment.timestampEnd !== null
+                ? comment.timestampEnd
+                : comment.timestamp + 1;
+            const isActive = currentTime >= comment.timestamp - 0.15 && currentTime <= activeUntil;
 
             if (hasRange && comment.timestampEnd !== null) {
               return (
@@ -752,7 +769,10 @@ export const PlayerCore = memo(function PlayerCore({
                       timestampEnd: comment.timestampEnd,
                     });
                   }}
-                  className="absolute top-1/2 z-10 h-4 -translate-y-1/2 transition-opacity hover:opacity-100"
+                  className={cn(
+                    'absolute top-1/2 z-10 h-4 -translate-y-1/2 transition-opacity hover:opacity-100',
+                    isActive && 'opacity-100 drop-shadow-[0_0_6px_rgba(255,255,255,0.7)]'
+                  )}
                   style={{
                     left: `calc(${startPercent}% - 6px)`,
                     width: `calc(${Math.max(endPercent - startPercent, 0)}% + 12px)`,
@@ -785,7 +805,10 @@ export const PlayerCore = memo(function PlayerCore({
                     timestampEnd: comment.timestampEnd,
                   });
                 }}
-                className="absolute top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full transition-transform hover:scale-150"
+                className={cn(
+                  'absolute top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full transition-transform hover:scale-150',
+                  isActive && 'scale-150 ring-2 ring-white/90 z-20'
+                )}
                 style={{
                   left: `calc(${startPercent}% - 6px)`,
                   backgroundColor: comment.color,

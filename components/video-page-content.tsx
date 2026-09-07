@@ -414,6 +414,9 @@ export function VideoPageContent({
     handleTimelineMouseDown,
     handleTimelineMouseMove,
     handleTimelineMouseUp,
+    handleTimelineTouchStart,
+    handleTimelineTouchMove,
+    handleTimelineTouchEnd,
     toggleFullscreen,
   } = useVideoPlayer({
     activeVersion,
@@ -988,6 +991,9 @@ export function VideoPageContent({
             setIsMobileCommentsOpen={setIsMobileCommentsOpen}
             handleTimelineMouseDown={handleTimelineMouseDown}
             handleTimelineMouseMove={handleTimelineMouseMove}
+            handleTimelineTouchStart={handleTimelineTouchStart}
+            handleTimelineTouchMove={handleTimelineTouchMove}
+            handleTimelineTouchEnd={handleTimelineTouchEnd}
             handleSeekToTimestamp={handleSeekToTimestamp}
             commentMarkers={commentMarkers}
             reviewMarkers={reviewMarkers}

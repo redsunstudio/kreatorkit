@@ -68,6 +68,10 @@ export function useVideoPlayer({
   const pendingHlsQualityRef = useRef<number | null>(null);
   const bunnySourceSwitchResumeRef = useRef<{ time: number; wasPlaying: boolean } | null>(null);
   const previousVersionKeyRef = useRef<string | null>(null);
+  // Frame.io behaviour: a new cut opens where the reviewer was, not at 0:00.
+  // The playhead is stashed here across the player teardown and restored on ready.
+  const carryOverTimeRef = useRef<number | null>(null);
+  const currentTimeRef = useRef(0);
   const [isBunnyPortraitSource, setIsBunnyPortraitSource] = useState(false);
   const [bunnyPortraitFrameWidth, setBunnyPortraitFrameWidth] = useState<number>(0);
   const [cursorIdle, setCursorIdle] = useState(false);
@@ -135,6 +139,10 @@ export function useVideoPlayer({
 
     bunnyFrameCallbackIdRef.current = videoEl.requestVideoFrameCallback(trackFrameRate);
   }, [stopBunnyFrameTracking, videoRef]);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   useEffect(() => {
     isDraggingRef.current = isDragging;
@@ -211,6 +219,9 @@ export function useVideoPlayer({
 
     const currentVersionKey = `${activeProviderId ?? 'none'}:${activeVersionId ?? 'none'}`;
     const versionChanged = previousVersionKeyRef.current !== currentVersionKey;
+    if (versionChanged && previousVersionKeyRef.current !== null && currentTimeRef.current > 0) {
+      carryOverTimeRef.current = currentTimeRef.current;
+    }
     previousVersionKeyRef.current = currentVersionKey;
 
     setIsReady(false);
@@ -1003,6 +1014,13 @@ export function useVideoPlayer({
           }
           break;
         case 'Comma':
+          if (!e.shiftKey) {
+            // Bare , and . step one frame (Frame.io / Premiere muscle memory).
+            e.preventDefault();
+            playerRef.current?.pauseVideo?.();
+            handleSeekToTimestamp(Math.max(0, currentTime - frameStepSeconds));
+            break;
+          }
           if (e.shiftKey) {
             e.preventDefault();
             const currentIndex = speedOptions.indexOf(playbackSpeed);
@@ -1014,6 +1032,12 @@ export function useVideoPlayer({
           }
           break;
         case 'Period':
+          if (!e.shiftKey) {
+            e.preventDefault();
+            playerRef.current?.pauseVideo?.();
+            handleSeekToTimestamp(Math.min(duration, currentTime + frameStepSeconds));
+            break;
+          }
           if (e.shiftKey) {
             e.preventDefault();
             const currentIndex = speedOptions.indexOf(playbackSpeed);
@@ -1055,6 +1079,21 @@ export function useVideoPlayer({
           e.preventDefault();
           toggleFullscreen();
           break;
+        case 'KeyC':
+          // Start a note at the playhead: pause, then hand focus to the composer.
+          if (e.metaKey || e.ctrlKey || e.altKey) break;
+          e.preventDefault();
+          playerRef.current?.pauseVideo?.();
+          window.dispatchEvent(new CustomEvent('kk:focus-composer'));
+          break;
+        default: {
+          // 0-9 jump to that tenth of the cut (YouTube-style).
+          const digit = /^Digit([0-9])$/.exec(e.code);
+          if (digit && !e.metaKey && !e.ctrlKey && !e.altKey && duration > 0) {
+            e.preventDefault();
+            handleSeekToTimestamp((Number(digit[1]) / 10) * duration);
+          }
+        }
       }
     };
 
@@ -1068,9 +1107,24 @@ export function useVideoPlayer({
     playbackSpeed,
     speedOptions,
     handleSkip,
+    handleSeekToTimestamp,
+    frameStepSeconds,
     toggleFullscreen,
     playerRef,
   ]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    const resumeAt = carryOverTimeRef.current;
+    carryOverTimeRef.current = null;
+    if (resumeAt === null || resumeAt <= 0) return;
+    try {
+      playerRef.current?.seekTo?.(resumeAt, true);
+      setCurrentTime(resumeAt);
+    } catch {
+      // A cut shorter than the old playhead just opens at 0 - harmless.
+    }
+  }, [isReady, playerRef]);
 
   const handleSpeedChange = useCallback(
     (speed: number) => {
@@ -1164,6 +1218,47 @@ export function useVideoPlayer({
     }
   }, [isDragging, currentTime, handleSeekToTimestamp]);
 
+  // Touch scrub - phones had tap-to-seek only, no drag. Mirrors the mouse trio.
+  const timeFromTouch = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      const touch = e.touches[0] ?? e.changedTouches[0];
+      if (!touch || !timelineRef.current) return null;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const percentage = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+      return percentage * duration;
+    },
+    [duration, timelineRef]
+  );
+
+  const handleTimelineTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      const t = timeFromTouch(e);
+      if (t === null) return;
+      setIsDragging(true);
+      setCurrentTime(t);
+    },
+    [timeFromTouch]
+  );
+
+  const handleTimelineTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!isDraggingRef.current) return;
+      const t = timeFromTouch(e);
+      if (t !== null) setCurrentTime(t);
+    },
+    [timeFromTouch]
+  );
+
+  const handleTimelineTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!isDraggingRef.current) return;
+      const t = timeFromTouch(e);
+      handleSeekToTimestamp(t ?? currentTime);
+      setIsDragging(false);
+    },
+    [timeFromTouch, currentTime, handleSeekToTimestamp]
+  );
+
   return {
     isReady,
     bunnyPlaybackState,
@@ -1200,6 +1295,9 @@ export function useVideoPlayer({
     handleTimelineMouseDown,
     handleTimelineMouseMove,
     handleTimelineMouseUp,
+    handleTimelineTouchStart,
+    handleTimelineTouchMove,
+    handleTimelineTouchEnd,
     toggleFullscreen,
   };
 }
