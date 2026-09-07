@@ -8,6 +8,9 @@ interface RouteParams {
   params: Promise<{ videoId: string }>;
 }
 
+/** Reserved guest identity for comments written over the agent rail. */
+const AGENT_GUEST_EMAIL = 'agent@kreatorkit.local';
+
 const commentSelect = {
   id: true,
   content: true,
@@ -21,6 +24,7 @@ const commentSelect = {
   fileName: true,
   annotationData: true,
   guestName: true,
+  guestEmail: true,
   createdAt: true,
   updatedAt: true,
   author: { select: { id: true, name: true } },
@@ -40,6 +44,7 @@ function shapeComment(c: {
   fileName: string | null;
   annotationData: string | null;
   guestName: string | null;
+  guestEmail?: string | null;
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null } | null;
@@ -68,7 +73,10 @@ function shapeComment(c: {
       c.annotationData ? 'annotation' : null,
     ].filter((k): k is string => k !== null),
     authorName: c.author?.name ?? c.guestName ?? 'Guest',
-    isTeam: !!c.author, // registered users are team; guests came via a share link
+    // Registered users are team; guests came via a share link. Agent-written
+    // comments are guests too (no authorId), so they carry a reserved guestEmail
+    // - without it an answered thread still counted as awaiting the team.
+    isTeam: !!c.author || c.guestEmail === AGENT_GUEST_EMAIL,
     tag: c.tag,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
@@ -271,6 +279,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         timestampEnd,
         parentId,
         guestName: authorName,
+        guestEmail: AGENT_GUEST_EMAIL,
         versionId: version.id,
         tagId,
       },
