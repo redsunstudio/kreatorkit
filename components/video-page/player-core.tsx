@@ -301,7 +301,7 @@ export const PlayerCore = memo(function PlayerCore({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {activeProviderId === 'r2'
-                    ? 'This video file could not be loaded. Try refreshing the page or re-uploading the version.'
+                    ? 'This video file could not be loaded. Try refreshing the page or re-uploading the cut.'
                     : "The video couldn't load. Please refresh this page in a moment."}
                 </p>
               </div>

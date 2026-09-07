@@ -223,7 +223,7 @@ export const VideoPageHeader = memo(function VideoPageHeader({
                   onClick={onDeleteCurrentVersionClick}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Current Version
+                  Delete this cut
                 </DropdownMenuItem>
               </>
             )}
@@ -312,7 +312,7 @@ export const VideoPageHeader = memo(function VideoPageHeader({
                   {versions.length >= 2 && (
                     <DropdownMenuItem onSelect={onOpenCompare}>
                       <GitCompareArrows className="h-4 w-4 mr-2" />
-                      Compare Versions
+                      Compare cuts
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />

@@ -742,7 +742,7 @@ export function VideoItemClient({
         }),
       });
       if (!fin.ok)
-        throw new Error((await fin.json())?.error?.message || 'could not create the version');
+        throw new Error((await fin.json())?.error?.message || 'could not create the cut');
       toast.success('New cut uploaded — moved to review');
       setStatus((s) =>
         ['IDEA', 'FILMED', 'EDITING'].includes(stageOf(s)) ||
@@ -2069,7 +2069,7 @@ export function VideoItemClient({
             </AlertDialogTitle>
             <AlertDialogDescription>
               Warning: this clears all assets for this video and all prior versions aside from the
-              approved version. The thumbnail, the brief and the final cut with its comments remain.
+              approved cut. The thumbnail, the brief and the final cut with its comments remain.
               {cleanupOnly ? ' The item stays in Published.' : ''} This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -77,7 +77,7 @@ export function ApprovalRequestDialog({
 
         {isBlockedByPendingRequest ? (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-            A pending approval request already exists for this version.
+            A pending approval request already exists for this cut.
           </div>
         ) : null}
 

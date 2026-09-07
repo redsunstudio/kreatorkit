@@ -69,7 +69,7 @@ export function ReviewDecisionBar({
       toast.success(
         decision === 'approve'
           ? 'Video approved — ready for upload.'
-          : 'Review complete — the editor has been notified and will work on the next version.'
+          : 'Review complete — the editor has been notified and will work on the next cut.'
       );
       onDecided(nextStatus);
     } catch {
@@ -135,7 +135,7 @@ export function ReviewDecisionBar({
             <AlertDialogDescription>
               {confirming === 'approve'
                 ? 'Please confirm this video is approved and ready for upload.'
-                : 'Are you sure you’re finished with this review? This will send the video back to the editor to work on the next version.'}
+                : 'Are you sure you’re finished with this review? This will send the video back to the editor to work on the next cut.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
