@@ -617,7 +617,10 @@ export function PipelineBoard({
             </div>
             <div
               className={cn(
-                'rounded-lg border divide-y overflow-hidden transition-colors',
+                // Phones side-scroll the stage (John's ask): the row grid keeps
+                // its full width so the title and the action buttons stay
+                // visible instead of the title track collapsing to 0px.
+                'rounded-lg border transition-colors overflow-x-auto md:overflow-hidden',
                 STAGE_COL[stage.key],
                 dragOverStage === stage.key && 'border-primary/60 bg-primary/5'
               )}
@@ -636,9 +639,12 @@ export function PipelineBoard({
                     onDragStart={(e) => e.dataTransfer.setData('text/kk-video', v.id)}
                     className={cn(
                       'group grid items-center gap-x-3 px-4 py-2 border-l-2 border-l-transparent hover:border-l-primary/70 hover:bg-white/[0.03] transition-all duration-150',
+                      // min-w below md = the side-scroll floor; the title track
+                      // never drops under 180px so a row always reads.
+                      'min-w-[720px] md:min-w-0 border-t first:border-t-0',
                       canEdit
-                        ? 'grid-cols-[16px_64px_minmax(0,1fr)_auto_64px_20px_auto]'
-                        : 'grid-cols-[64px_minmax(0,1fr)_auto_64px_20px_auto]',
+                        ? 'grid-cols-[16px_64px_minmax(180px,1fr)_auto_64px_20px_auto]'
+                        : 'grid-cols-[64px_minmax(180px,1fr)_auto_64px_20px_auto]',
                       canEdit && 'cursor-grab active:cursor-grabbing',
                       selected.has(v.id) && 'bg-primary/[0.07] border-l-primary'
                     )}
