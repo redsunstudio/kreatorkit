@@ -23,6 +23,10 @@ export function useWatchProgress({
   const [savedProgress, setSavedProgress] = useState<number | null>(null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [progressFetchKey, setProgressFetchKey] = useState(0);
+  // The version this hook last loaded progress for. A CHANGE (not the first
+  // load) is a cut switch: the player carries the playhead across, so the
+  // "Continue watching?" prompt must not fight it.
+  const promptedVersionRef = useRef<string | null>(null);
 
   const videoDurationRef = useRef(0);
   const progressSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -167,8 +171,11 @@ export function useWatchProgress({
   );
 
   useEffect(() => {
-    loadWatchProgress();
-  }, [loadWatchProgress, progressFetchKey]);
+    const isCutSwitch =
+      promptedVersionRef.current !== null && promptedVersionRef.current !== activeVersionId;
+    promptedVersionRef.current = activeVersionId ?? null;
+    loadWatchProgress(!isCutSwitch);
+  }, [loadWatchProgress, progressFetchKey, activeVersionId]);
 
   useEffect(() => {
     if (lastPathnameRef.current !== pathname) {

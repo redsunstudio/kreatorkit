@@ -187,7 +187,8 @@ export const VideoPageHeader = memo(function VideoPageHeader({
               <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          {/* w-80: the menu used to shrink-wrap and wrap the upload date one word per line. */}
+          <DropdownMenuContent align="end" className="w-80">
             {versions.map((version) => (
               <DropdownMenuItem
                 key={version.id}
