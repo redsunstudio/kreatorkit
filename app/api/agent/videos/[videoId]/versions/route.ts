@@ -27,7 +27,11 @@ interface RouteParams {
   params: Promise<{ videoId: string }>;
 }
 
-const MAX_BYTES = BigInt(5 * 1024 * 1024 * 1024);
+// Was 5 GiB — that is S3's single-PUT ceiling, which multipart already removes, so it
+// was rejecting long graded episodes for no storage reason. Now a sanity guard only.
+const MAX_BYTES = BigInt(200) * BigInt(1024 * 1024 * 1024);
+// S3 allows 10,000 parts; more parts = smaller parts = cheaper retries on a flaky line.
+const MAX_PARTS = 10000;
 const SAFE_VIDEO_KEY =
   /^videos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i;
 
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         sizeBytes = BigInt(body.init.sizeBytes);
         if (sizeBytes <= BigInt(0) || sizeBytes > MAX_BYTES) throw new Error();
       } catch {
-        return apiErrors.badRequest('cuts are capped at 5GB');
+        return apiErrors.badRequest('cuts are capped at 200GB');
       }
       const ext = getVideoExtensionFromMime(contentType) ?? 'mp4';
       const objectKey = buildVideoObjectKey(`${randomUUID()}.${ext}`);
@@ -90,11 +94,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         sizeBytes = BigInt(body.initMultipart.sizeBytes);
         if (sizeBytes <= BigInt(0) || sizeBytes > MAX_BYTES) throw new Error();
       } catch {
-        return apiErrors.badRequest('cuts are capped at 5GB');
+        return apiErrors.badRequest('cuts are capped at 200GB');
       }
       const partCount = Number(body.initMultipart.partCount);
-      if (!Number.isInteger(partCount) || partCount < 1 || partCount > 200) {
-        return apiErrors.badRequest('partCount must be 1-200');
+      if (!Number.isInteger(partCount) || partCount < 1 || partCount > MAX_PARTS) {
+        return apiErrors.badRequest(`partCount must be 1-${MAX_PARTS}`);
       }
       const ext = getVideoExtensionFromMime(contentType) ?? 'mp4';
       const objectKey = buildVideoObjectKey(`${randomUUID()}.${ext}`);

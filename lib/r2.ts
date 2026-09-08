@@ -690,4 +690,14 @@ export async function abortMultipartVideoUpload(key: string, uploadId: string): 
   );
 }
 
+/**
+ * Prefix-agnostic aliases. The part presign / complete / abort commands do not care
+ * whether the key sits under `videos/` or `files/` — only the CreateMultipartUpload
+ * guards do. Exporting them under neutral names so the asset (handoff) rail can use
+ * multipart without reading as if it were uploading a cut.
+ */
+export const presignUploadPart = presignVideoUploadPart;
+export const completeMultipartUpload = completeMultipartVideoUpload;
+export const abortMultipartUpload = abortMultipartVideoUpload;
+
 export { R2_BUCKET_NAME };

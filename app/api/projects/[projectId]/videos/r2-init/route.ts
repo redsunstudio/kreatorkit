@@ -133,8 +133,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let partCount = 0;
     if (partCountRaw !== undefined && partCountRaw !== null) {
       partCount = Number(partCountRaw);
-      if (!Number.isInteger(partCount) || partCount < 2 || partCount > 200) {
-        return apiErrors.badRequest('partCount must be an integer between 2 and 200');
+      if (!Number.isInteger(partCount) || partCount < 2 || partCount > 10000) {
+        return apiErrors.badRequest('partCount must be an integer between 2 and 10000');
       }
     }
 
