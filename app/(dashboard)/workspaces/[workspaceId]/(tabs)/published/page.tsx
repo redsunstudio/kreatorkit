@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, ExternalLink, Eye, MessageSquare, ThumbsUp } from 'lucide-react';
+import { after } from 'next/server';
+import { ExternalLink, Eye, MessageSquare, ThumbsUp } from 'lucide-react';
 import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
 import { isPublishDataStale, syncPublishedVideos } from '@/lib/publish-sync';
 import { typeMeta } from '@/lib/video-type';
-import { ModuleNav } from '@/components/workspace/module-nav';
 import { ThumbnailImage } from '@/components/thumbnail-image';
-import { PublishedStorageActions } from '@/app/(dashboard)/workspaces/[workspaceId]/published/published-storage-actions';
+import { PublishedStorageActions } from './published-storage-actions';
 
 interface PublishedPageProps {
   params: Promise<{ workspaceId: string }>;
@@ -47,42 +47,23 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
     redirect(`/workspaces/${workspaceId}`);
   }
 
-  let videos = initialVideos;
+  const videos = initialVideos;
 
-  // The ~24h sync, done lazily: refresh URL + analytics when anything is stale.
+  // The ~24h sync, done lazily — but AFTER the response, never on the request
+  // path. Waiting on YouTube/Zernio here was the multi-second tab open; the
+  // panel now renders what it has and the next visit shows the refreshed stats.
   if (videos.some((v) => isPublishDataStale(v))) {
-    try {
-      const r = await syncPublishedVideos(workspaceId);
-      if (r.synced > 0) videos = await load();
-    } catch {
-      /* the tab still renders with whatever we have */
-    }
+    after(async () => {
+      try {
+        await syncPublishedVideos(workspaceId);
+      } catch {
+        /* next view retries */
+      }
+    });
   }
 
   return (
-    <div
-      className="px-6 lg:px-8 py-8 w-full"
-      style={
-        workspace.brandAccent
-          ? ({ '--primary': workspace.brandAccent } as React.CSSProperties)
-          : undefined
-      }
-    >
-      <div className="mb-6">
-        <Link
-          href="/workspaces"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          All Workspaces
-        </Link>
-      </div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">{workspace.name}</h1>
-      </div>
-
-      <ModuleNav workspace={workspace} active="published" />
-
+    <>
       {videos.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           Nothing published yet — when a video ships, it moves off the pipeline and lands here.
@@ -179,6 +160,6 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
           })}
         </div>
       )}
-    </div>
+    </>
   );
 }

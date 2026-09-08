@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   MonitorPlay,
   Inbox,
@@ -29,24 +32,47 @@ const MODULE_META: Partial<
 
 interface ModuleNavProps {
   workspace: { id: string; features?: unknown };
-  active: KreatorKitModule;
+  /** Optional override; by default the active tab is read from the URL. */
+  active?: KreatorKitModule;
 }
 
-/** KreatorKit module tab bar — one tab per enabled module for this client. */
+/**
+ * KreatorKit module tab bar — one tab per enabled module for this client.
+ *
+ * Client component so it can live in the workspace layout: the shell (hero +
+ * tabs) stays mounted across tab switches and only the panel below swaps,
+ * which is what makes switching feel instant instead of a full page reload.
+ * Tabs prefetch their full route so the panel is usually ready before the click.
+ */
 export function ModuleNav({ workspace, active }: ModuleNavProps) {
+  const pathname = usePathname();
   const enabled = KREATORKIT_MODULES.filter((m) => MODULE_META[m] && hasModule(workspace, m));
   if (enabled.length <= 1) return null;
+
+  // Longest matching href wins: `/workspaces/{id}` is a prefix of every tab.
+  const current =
+    active ??
+    enabled.reduce<{ key: KreatorKitModule | null; len: number }>(
+      (best, m) => {
+        const href = MODULE_META[m]!.href(workspace.id);
+        const matches = pathname === href || pathname.startsWith(`${href}/`);
+        return matches && href.length > best.len ? { key: m, len: href.length } : best;
+      },
+      { key: null, len: -1 }
+    ).key;
 
   return (
     <nav className="mb-8 flex items-center gap-1 border-b overflow-x-auto">
       {enabled.map((m) => {
         const meta = MODULE_META[m]!;
         const Icon = meta.icon;
-        const isActive = m === active;
+        const isActive = m === current;
         return (
           <Link
             key={m}
             href={meta.href(workspace.id)}
+            prefetch={true}
+            aria-current={isActive ? 'page' : undefined}
             className={cn(
               'inline-flex flex-none items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
               isActive

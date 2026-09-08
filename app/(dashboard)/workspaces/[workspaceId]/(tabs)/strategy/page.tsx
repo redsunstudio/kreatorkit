@@ -1,10 +1,7 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
-import { ModuleNav } from '@/components/workspace/module-nav';
 import { StrategyEditor } from '@/components/workspace/strategy-editor';
 import { parseStrategy } from '@/lib/strategy';
 
@@ -52,32 +49,10 @@ export default async function StrategyPage({ params }: StrategyPageProps) {
   for (const g of pillarGroups) if (g.pillarId) pillarCounts[g.pillarId] = g._count._all;
 
   return (
-    <div
-      className="px-6 lg:px-8 py-8 w-full"
-      style={
-        workspace.brandAccent
-          ? ({ '--primary': workspace.brandAccent } as React.CSSProperties)
-          : undefined
-      }
-    >
-      <div className="mb-6">
-        <Link
-          href={`/workspaces/${workspaceId}`}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          {workspace.name}
-        </Link>
-      </div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">{workspace.name}</h1>
-        <p className="text-muted-foreground mt-1">
-          The channel&rsquo;s strategy — pillars, recurring ideas and notes the whole team works
-          from.
-        </p>
-      </div>
-
-      <ModuleNav workspace={workspace} active="strategy" />
+    <>
+      <p className="mb-6 text-sm text-muted-foreground">
+        The channel&rsquo;s strategy — pillars, recurring ideas and notes the whole team works from.
+      </p>
 
       <StrategyEditor
         workspaceId={workspaceId}
@@ -87,6 +62,6 @@ export default async function StrategyPage({ params }: StrategyPageProps) {
         accent={workspace.brandAccent}
         pillarCounts={pillarCounts}
       />
-    </div>
+    </>
   );
 }

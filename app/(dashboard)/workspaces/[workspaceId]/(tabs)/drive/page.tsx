@@ -1,11 +1,8 @@
-import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasModule } from '@/lib/workspace-features';
-import { ModuleNav } from '@/components/workspace/module-nav';
 import {
   driveFileDTO,
   driveFolderDTO,
@@ -83,31 +80,10 @@ export default async function DrivePage({ params }: DrivePageProps) {
   const linkBaseUrl = resolveLinkBaseUrl(fallbackOrigin);
 
   return (
-    <div
-      className="px-6 lg:px-8 py-8 w-full"
-      style={
-        workspace.brandAccent
-          ? ({ '--primary': workspace.brandAccent } as React.CSSProperties)
-          : undefined
-      }
-    >
-      <div className="mb-6">
-        <Link
-          href={`/workspaces/${workspaceId}`}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          {workspace.name}
-        </Link>
-      </div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Drive</h1>
-        <p className="text-muted-foreground mt-1">
-          Where client uploads land before they belong to a video.
-        </p>
-      </div>
-
-      <ModuleNav workspace={workspace} active="drive" />
+    <>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Where client uploads land before they belong to a video.
+      </p>
 
       <DriveClient
         workspaceId={workspaceId}
@@ -117,6 +93,6 @@ export default async function DrivePage({ params }: DrivePageProps) {
         initialFolders={folders.map(driveFolderDTO)}
         initialLinks={links.map((l) => driveLinkDTO(l, linkBaseUrl))}
       />
-    </div>
+    </>
   );
 }
