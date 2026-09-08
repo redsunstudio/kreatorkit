@@ -513,7 +513,7 @@ export const CommentComposer = memo(function CommentComposer({
               <div className="flex-1" />
               {isExpanded && (
                 <span className="hidden sm:inline text-[11px] text-muted-foreground mr-1">
-                  Cmd+Enter
+                  Enter to send · Shift+Enter for a new line
                 </span>
               )}
               <Button
