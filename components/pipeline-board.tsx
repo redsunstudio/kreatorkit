@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { IntentLink } from '@/components/intent-link';
 import {
   Archive,
   Check,
@@ -701,13 +701,12 @@ export function PipelineBoard({
                     />
                     <Thumb v={v} size="row" />
                     <div className="min-w-0">
-                      <Link
+                      <IntentLink
                         href={itemHref(v)}
-                        unstable_dynamicOnHover
                         className="block text-sm font-medium hover:text-primary transition-colors truncate"
                       >
                         {v.title}
-                      </Link>
+                      </IntentLink>
                       {v.brief && (
                         <p className="hidden lg:block text-xs text-muted-foreground truncate mt-0.5">
                           {v.brief}
@@ -733,14 +732,13 @@ export function PipelineBoard({
                       )}
                       {reviewHref(v) && (
                         <>
-                          <Link
+                          <IntentLink
                             href={reviewHref(v)!}
-                            unstable_dynamicOnHover
                             className="flex-none inline-flex items-center gap-1 h-7 rounded-md border px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                           >
                             <Play className="h-3 w-3" />
                             Review
-                          </Link>
+                          </IntentLink>
                           <CopyReviewLink v={v} size="row" />
                         </>
                       )}
@@ -829,16 +827,15 @@ export function PipelineBoard({
                         'pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus:opacity-100'
                     )}
                   />
-                  <Link href={itemHref(v)} unstable_dynamicOnHover className="block">
+                  <IntentLink href={itemHref(v)} className="block">
                     <Thumb v={v} size="card" />
-                  </Link>
-                  <Link
+                  </IntentLink>
+                  <IntentLink
                     href={itemHref(v)}
-                    unstable_dynamicOnHover
                     className="text-sm font-medium hover:text-primary transition-colors line-clamp-2 block mt-2.5"
                   >
                     {v.title}
-                  </Link>
+                  </IntentLink>
                   {/* flex-wrap: the meta cluster + action buttons overflow a 250px
                       card at their widest ("Long form" + v18 date + pkg + 💬) —
                       wrapping drops the buttons to their own line instead of
@@ -847,14 +844,13 @@ export function PipelineBoard({
                     {rowMeta(v)}
                     {reviewHref(v) && (
                       <div className="ml-auto flex items-center gap-1">
-                        <Link
+                        <IntentLink
                           href={reviewHref(v)!}
-                          unstable_dynamicOnHover
                           className="inline-flex items-center gap-1 h-6 rounded-md border px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                         >
                           <Play className="h-3 w-3" />
                           Review
-                        </Link>
+                        </IntentLink>
                         <CopyReviewLink v={v} size="card" />
                       </div>
                     )}
