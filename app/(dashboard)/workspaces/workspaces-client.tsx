@@ -98,7 +98,12 @@ export function WorkspacesClient({
       {workspaces.length > 0 ? (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {workspaces.map((workspace) => (
-            <Link key={workspace.id} href={`/workspaces/${workspace.id}`} className="group">
+            <Link
+              key={workspace.id}
+              href={`/workspaces/${workspace.id}`}
+              unstable_dynamicOnHover
+              className="group"
+            >
               <div
                 className="relative aspect-[4/5] rounded-[1.4rem] border bg-card p-4 flex flex-col overflow-hidden transition-all duration-200 ease-out group-hover:-translate-y-1 group-hover:border-white/20"
                 style={{

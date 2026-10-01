@@ -65,6 +65,7 @@ export default async function WorkspaceTabsLayout({ children, params }: Workspac
       <div className="mb-6">
         <Link
           href="/workspaces"
+          unstable_dynamicOnHover
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />

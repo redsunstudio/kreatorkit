@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Archive,
   Check,
@@ -253,6 +254,33 @@ export function PipelineBoard({
   // keep local state in sync with fresh server props
   useEffect(() => setItems(videos), [videos]);
 
+  // Edits here are optimistic, so the screen is already right — but the router
+  // cache still holds the pre-edit page, and coming back to this tab would
+  // briefly show the old statuses. One quiet refresh after the edits settle
+  // (debounced, never while a write is in flight) keeps the cache honest
+  // without a refresh per click during rapid triage.
+  const router = useRouter();
+  const inFlight = useRef(0);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const beginWrite = () => {
+    inFlight.current += 1;
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+  };
+  const endWrite = (changed: boolean) => {
+    inFlight.current = Math.max(0, inFlight.current - 1);
+    if (!changed || inFlight.current > 0) return;
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      if (inFlight.current === 0) router.refresh();
+    }, 1500);
+  };
+  useEffect(
+    () => () => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    },
+    []
+  );
+
   // A selection can only ever name rows that are still on the board.
   useEffect(() => {
     setSelected((prev) => {
@@ -290,6 +318,8 @@ export function PipelineBoard({
   async function createIdea() {
     if (!title.trim()) return;
     setCreating(true);
+    beginWrite();
+    let changed = false;
     try {
       const res = await fetch(
         workspaceId ? `/api/workspaces/${workspaceId}/videos` : `/api/projects/${projectId}/videos`,
@@ -308,6 +338,7 @@ export function PipelineBoard({
       if (!res.ok)
         throw new Error((await res.json())?.error?.message || 'Could not create the item');
       const created = (await res.json()).data;
+      changed = true;
       setItems((prev) => [
         {
           id: created.id,
@@ -334,6 +365,7 @@ export function PipelineBoard({
       toast.error(e instanceof Error ? e.message : 'Could not create the item');
     } finally {
       setCreating(false);
+      endWrite(changed);
     }
   }
 
@@ -344,6 +376,8 @@ export function PipelineBoard({
 
     const prev = current.status;
     setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: next } : v)));
+    beginWrite();
+    let changed = false;
     const patch = () =>
       fetch(`/api/projects/${current.projectId || projectId}/videos/${videoId}`, {
         method: 'PATCH',
@@ -362,12 +396,15 @@ export function PipelineBoard({
         const body = await res.json().catch(() => null);
         throw new Error(body?.error?.message || '');
       }
+      changed = true;
     } catch (e) {
       setItems((list) => list.map((v) => (v.id === videoId ? { ...v, status: prev } : v)));
       // The server's refusal reason (validation) is the useful part — show it
       // when there is one.
       const reason = e instanceof Error && e.message ? e.message : '';
       toast.error(reason || 'Could not update status — reverted');
+    } finally {
+      endWrite(changed);
     }
   }
 
@@ -409,6 +446,8 @@ export function PipelineBoard({
     const targeted = new Set(ids);
     setBulkBusy(true);
     setItems((list) => list.map((v) => (targeted.has(v.id) ? { ...v, status: next } : v)));
+    beginWrite();
+    let changed = false;
     try {
       const res = await fetch(`/api/workspaces/${workspaceId}/videos/bulk`, {
         method: 'POST',
@@ -419,6 +458,7 @@ export function PipelineBoard({
       if (!res.ok) throw new Error(body?.error?.message || 'Could not update the selected items');
 
       const moved = body?.data?.updated ?? 0;
+      changed = moved > 0;
       if (moved > 0) {
         const label = PIPELINE_STAGES.find((s) => s.key === next)?.label ?? next;
         toast.success(`${moved} item${moved === 1 ? '' : 's'} moved to ${label}`);
@@ -431,6 +471,7 @@ export function PipelineBoard({
       toast.error(e instanceof Error ? e.message : 'Could not update the selected items');
     } finally {
       setBulkBusy(false);
+      endWrite(changed);
     }
   }
 
@@ -662,6 +703,7 @@ export function PipelineBoard({
                     <div className="min-w-0">
                       <Link
                         href={itemHref(v)}
+                        unstable_dynamicOnHover
                         className="block text-sm font-medium hover:text-primary transition-colors truncate"
                       >
                         {v.title}
@@ -693,6 +735,7 @@ export function PipelineBoard({
                         <>
                           <Link
                             href={reviewHref(v)!}
+                            unstable_dynamicOnHover
                             className="flex-none inline-flex items-center gap-1 h-7 rounded-md border px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                           >
                             <Play className="h-3 w-3" />
@@ -786,11 +829,12 @@ export function PipelineBoard({
                         'pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus:opacity-100'
                     )}
                   />
-                  <Link href={itemHref(v)} className="block">
+                  <Link href={itemHref(v)} unstable_dynamicOnHover className="block">
                     <Thumb v={v} size="card" />
                   </Link>
                   <Link
                     href={itemHref(v)}
+                    unstable_dynamicOnHover
                     className="text-sm font-medium hover:text-primary transition-colors line-clamp-2 block mt-2.5"
                   >
                     {v.title}
@@ -805,6 +849,7 @@ export function PipelineBoard({
                       <div className="ml-auto flex items-center gap-1">
                         <Link
                           href={reviewHref(v)!}
+                          unstable_dynamicOnHover
                           className="inline-flex items-center gap-1 h-6 rounded-md border px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                         >
                           <Play className="h-3 w-3" />

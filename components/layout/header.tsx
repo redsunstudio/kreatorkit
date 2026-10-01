@@ -150,6 +150,7 @@ export function Header({ user, showAppNavigation = false }: HeaderProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                unstable_dynamicOnHover
                 className={cn(
                   'flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors',
                   pathname === item.href ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'

@@ -42,7 +42,9 @@ interface ModuleNavProps {
  * Client component so it can live in the workspace layout: the shell (hero +
  * tabs) stays mounted across tab switches and only the panel below swaps,
  * which is what makes switching feel instant instead of a full page reload.
- * Tabs prefetch their full route so the panel is usually ready before the click.
+ * Tabs upgrade to a full prefetch on hover/touch, so the panel is usually ready
+ * before the click lands. (Prefetching all of them in full on every navigation
+ * fired ~6 server renders per click and slowed the one that mattered.)
  */
 export function ModuleNav({ workspace, active }: ModuleNavProps) {
   const pathname = usePathname();
@@ -71,7 +73,7 @@ export function ModuleNav({ workspace, active }: ModuleNavProps) {
           <Link
             key={m}
             href={meta.href(workspace.id)}
-            prefetch={true}
+            unstable_dynamicOnHover
             aria-current={isActive ? 'page' : undefined}
             className={cn(
               'inline-flex flex-none items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',

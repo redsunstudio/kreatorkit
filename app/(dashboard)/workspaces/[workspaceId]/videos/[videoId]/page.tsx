@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { isWorkspaceLinkedInReady, isWorkspacePublishReady } from '@/lib/publish-video';
 import { hasModule } from '@/lib/workspace-features';
@@ -20,7 +20,7 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
   // independent, so awaiting them one after another only added round trips —
   // and assets/notes used to be fetched by the client after hydration, which
   // meant the item painted empty and filled in a beat later.
-  const [video, workspace, assets, notes] = await Promise.all([
+  const [video, workspace, assets, notes, { access }] = await Promise.all([
     db.video.findUnique({
       where: { id: videoId },
       include: {
@@ -65,16 +65,14 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
         author: { select: { name: true } },
       },
     }),
+    // Access rides the same batch (it used to be a second, serial wave).
+    getWorkspaceAccess(workspaceId, session.user.id),
   ]);
 
   if (!video || video.project.workspaceId !== workspaceId) notFound();
   if (!workspace) notFound();
 
-  const access = await checkWorkspaceAccess(
-    { id: workspace.id, ownerId: workspace.ownerId },
-    session.user.id
-  );
-  if (!access.hasAccess) redirect('/dashboard');
+  if (!access?.hasAccess) redirect('/dashboard');
   const isAdmin = session.user.id === workspace.ownerId || workspace.members[0]?.role === 'ADMIN';
 
   return (
@@ -89,6 +87,7 @@ export default async function VideoItemPage({ params }: ItemPageProps) {
       <div className="mb-6">
         <Link
           href={`/workspaces/${workspaceId}`}
+          unstable_dynamicOnHover
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />

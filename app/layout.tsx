@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/theme-provider';
+import { NavProgress } from '@/components/nav-progress';
 import { seoConfig } from '@/lib/seo';
 import { CREATED_BY_NAME, CREATED_BY_URL } from '@/lib/created-by';
 import './globals.css';
@@ -136,6 +137,7 @@ export default function RootLayout({
               />
             </filter>
           </svg>
+          <NavProgress />
           {children}
           <div aria-hidden="true" className="noise-overlay" />
           <Toaster />

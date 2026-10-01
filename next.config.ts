@@ -43,8 +43,9 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', 'radix-ui'],
     serverMinification: true,
     // Client router cache for dynamic pages. Workspace tabs you just left come
-    // back instantly instead of re-rendering on the server every click.
-    staleTimes: { dynamic: 60, static: 300 },
+    // back instantly instead of re-rendering on the server every click. Your
+    // own edits still show at once: mutations call router.refresh().
+    staleTimes: { dynamic: 120, static: 300 },
   },
   poweredByHeader: false,
   compress: true,
