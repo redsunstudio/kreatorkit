@@ -29,7 +29,18 @@ export default async function PublishedPage({ params }: PublishedPageProps) {
     db.video.findMany({
       where: { status: 'PUBLISHED', project: { workspaceId } },
       orderBy: { updatedAt: 'desc' },
-      include: {
+      // Only what the list renders (it used to pull every column, whole brief
+      // and description bodies included, for each published video).
+      select: {
+        id: true,
+        projectId: true,
+        title: true,
+        videoType: true,
+        thumbnailUrl: true,
+        publishedUrl: true,
+        publishStats: true,
+        publishStatsAt: true,
+        storageClearedAt: true,
         // ALL versions (not just active) — storage held by a video is
         // everything sitting in R2 for it, not just the kept cut.
         versions: { select: { thumbnailUrl: true, isActive: true, sizeBytes: true } },
