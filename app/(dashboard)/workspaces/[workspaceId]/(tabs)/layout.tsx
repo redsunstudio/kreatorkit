@@ -8,6 +8,8 @@ import { ModuleNav } from '@/components/workspace/module-nav';
 import { CoverButton } from '@/components/workspace/cover-button';
 import { TaskDrawer } from '@/components/workspace/task-drawer';
 import { ThumbnailImage } from '@/components/thumbnail-image';
+import { TabShell } from '@/components/workspace/tab-shell';
+import { loadWorkspacePanel } from './panel-actions';
 
 interface WorkspaceTabsLayoutProps {
   children: React.ReactNode;
@@ -129,9 +131,10 @@ export default async function WorkspaceTabsLayout({ children, params }: Workspac
         </div>
       </div>
 
-      <ModuleNav workspace={workspace} />
-
-      {children}
+      <TabShell workspaceId={workspaceId} load={loadWorkspacePanel}>
+        <ModuleNav workspace={workspace} />
+        {children}
+      </TabShell>
     </div>
   );
 }

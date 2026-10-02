@@ -1,0 +1,64 @@
+import Link from 'next/link';
+import { notFound, redirect } from 'next/navigation';
+import { Inbox } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { auth, getWorkspaceAccess } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { hasModule } from '@/lib/workspace-features';
+
+interface HandoffPanelProps {
+  workspaceId: string;
+}
+
+/**
+ * The handoff panel. Rendered by the route page on a hard load / deep link,
+ * and by loadWorkspacePanel (../panel-actions) when the tab shell switches
+ * to it client-side. Does its own auth + access check either way.
+ */
+export async function HandoffPanel({ workspaceId }: HandoffPanelProps) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect('/login');
+  }
+
+  const [{ workspace: accessWorkspace, access }, workspace] = await Promise.all([
+    getWorkspaceAccess(workspaceId, session.user.id),
+    db.workspace.findUnique({ where: { id: workspaceId } }),
+  ]);
+  if (!workspace || !accessWorkspace || !access) notFound();
+  if (!access.hasAccess || !hasModule(workspace, 'handoff')) {
+    redirect(`/workspaces/${workspaceId}`);
+  }
+
+  return (
+    <>
+      <Card>
+        <CardContent className="py-14 flex flex-col items-center text-center gap-4">
+          <Inbox className="h-10 w-10 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Footage lives on each video</h2>
+          <div className="text-sm text-muted-foreground max-w-md space-y-2 text-left">
+            <p>
+              1. Open the pipeline and pick the video the footage belongs to — or create it with
+              &ldquo;New video idea&rdquo;.
+            </p>
+            <p>
+              2. Drag your files into the Footage section on that item. Big files upload in
+              parallel; keep the tab open until they finish.
+            </p>
+            <p>
+              3. Done — the team is notified, and you&rsquo;ll get an email when a cut is ready to
+              review.
+            </p>
+          </div>
+          <Link
+            href={`/workspaces/${workspaceId}`}
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Open the pipeline
+          </Link>
+        </CardContent>
+      </Card>
+    </>
+  );
+}

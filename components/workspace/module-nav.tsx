@@ -12,6 +12,8 @@ import {
   FolderInput,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTabShell } from '@/components/workspace/tab-shell';
+import { isShellTab } from '@/components/workspace/tab-shell-tabs';
 import { hasModule, KREATORKIT_MODULES, type KreatorKitModule } from '@/lib/workspace-features';
 
 // Modules without an entry here (e.g. 'posts') are capabilities, not tabs.
@@ -48,6 +50,7 @@ interface ModuleNavProps {
  */
 export function ModuleNav({ workspace, active }: ModuleNavProps) {
   const pathname = usePathname();
+  const shell = useTabShell();
   const enabled = KREATORKIT_MODULES.filter((m) => MODULE_META[m] && hasModule(workspace, m));
   if (enabled.length <= 1) return null;
 
@@ -69,11 +72,26 @@ export function ModuleNav({ workspace, active }: ModuleNavProps) {
         const meta = MODULE_META[m]!;
         const Icon = meta.icon;
         const isActive = m === current;
+        // With the client tab shell on, tabs switch without a route change
+        // (and warm on hover); otherwise they're ordinary hover-prefetch links.
+        const shellTab = shell?.enabled && isShellTab(m) ? m : null;
         return (
           <Link
             key={m}
             href={meta.href(workspace.id)}
-            unstable_dynamicOnHover
+            prefetch={shellTab ? false : undefined}
+            unstable_dynamicOnHover={!shellTab}
+            onMouseEnter={shellTab ? () => shell!.warm(shellTab) : undefined}
+            onTouchStart={shellTab ? () => shell!.warm(shellTab) : undefined}
+            onClick={
+              shellTab
+                ? (e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    e.preventDefault();
+                    shell!.go(shellTab);
+                  }
+                : undefined
+            }
             aria-current={isActive ? 'page' : undefined}
             className={cn(
               'inline-flex flex-none items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
