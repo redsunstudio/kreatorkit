@@ -32,7 +32,7 @@ import { shellTabFromPath, shellTabHref, type ShellTab } from './tab-shell-tabs'
  *    background when shown, and React reconciles it in place;
  *  - any failure falls back to a normal navigation.
  *
- * Rollout flag (per browser): ?fast=1 turns it on, ?fast=0 off.
+ * On by default; ?fast=0 turns it off for one browser, ?fast=1 back on.
  */
 const STALE_MS = 60_000;
 const FLAG_KEY = 'kk-fast-tabs';
@@ -58,13 +58,14 @@ export function useTabShell() {
 }
 
 function readFlag(): boolean {
+  // On by default. ?fast=0 opts this browser out (kill switch), ?fast=1 back in.
   try {
     const q = new URLSearchParams(window.location.search).get('fast');
-    if (q === '1') localStorage.setItem(FLAG_KEY, '1');
-    if (q === '0') localStorage.removeItem(FLAG_KEY);
-    return localStorage.getItem(FLAG_KEY) === '1';
+    if (q === '0') localStorage.setItem(FLAG_KEY, '0');
+    if (q === '1') localStorage.removeItem(FLAG_KEY);
+    return localStorage.getItem(FLAG_KEY) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
